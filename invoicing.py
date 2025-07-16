@@ -811,7 +811,9 @@ def main():
                     st.session_state.selected_invoice,
                     on_update=lambda inv_id, data: (update_invoice(inv_id, data), setattr(st.session_state, 'message', get_translation(st.session_state.language, 'invoiceUpdatedSuccess')), setattr(st.session_state, 'message_type', 'success'), st.rerun()),
                     on_delete=lambda item: (setattr(st.session_state, 'show_delete_confirm', True), setattr(st.session_state, 'item_to_delete', item), st.rerun()),
-                    on_generate_next_invoice=lambda original_inv: generate_next_invoice(original_inv, st.session_state.language, st.session_state.currency)
+                    on_generate_next_invoice=lambda original_inv: generate_next_invoice(original_inv, st.session_state.language, st.session_state.currency),
+                    lang=st.session_state.language,  # Added missing argument
+                    currency=st.session_state.currency # Added missing argument
                 )
             else:
                 st.info(get_translation(st.session_state.language, 'selectInvoice'))
@@ -848,7 +850,9 @@ def main():
                     st.session_state.selected_estimate,
                     on_update=lambda est_id, data: (update_estimate(est_id, data), setattr(st.session_state, 'message', get_translation(st.session_state.language, 'estimateUpdatedSuccess')), setattr(st.session_state, 'message_type', 'success'), st.rerun()),
                     on_delete=lambda item: (setattr(st.session_state, 'show_delete_confirm', True), setattr(st.session_state, 'item_to_delete', item), st.rerun()),
-                    on_convert=lambda estimate: convert_estimate_to_invoice(estimate, st.session_state.language, st.session_state.currency)
+                    on_convert=lambda estimate: convert_estimate_to_invoice(estimate, st.session_state.language, st.session_state.currency),
+                    lang=st.session_state.language, # Added missing argument
+                    currency=st.session_state.currency # Added missing argument
                 )
             else:
                 st.info(get_translation(st.session_state.language, 'selectEstimate'))
