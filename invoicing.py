@@ -702,35 +702,40 @@ def add_edit_invoice_form(on_add_invoice, on_update_invoice, lang, currency):
     
     st.header(get_translation(lang, 'addInvoiceTitle') if not is_editing else f"{get_translation(lang, 'edit')} {get_translation(lang, 'invoice')}")
 
-    initial_data = st.session_state.get('edited_invoice_data', {
-        'invoiceDate': datetime.now().strftime('%Y-%m-%d'),
-        'clientName': '',
-        'clientEmail': '',
-        'lineItems': [{'description': '', 'quantity': 1.0, 'unitPrice': 0.0}],
-        'isRecurring': False,
-        'recurrenceFrequency': 'monthly',
-        'nextInvoiceDate': datetime.now().strftime('%Y-%m-%d'),
-        'endDate': ''
-    })
+    # Ensure initial_data is always a dictionary
+    initial_data_from_session = st.session_state.get('edited_invoice_data')
+    if initial_data_from_session is None:
+        initial_data = {
+            'invoiceDate': datetime.now().strftime('%Y-%m-%d'),
+            'clientName': '',
+            'clientEmail': '',
+            'lineItems': [{'description': '', 'quantity': 1.0, 'unitPrice': 0.0}],
+            'isRecurring': False,
+            'recurrenceFrequency': 'monthly',
+            'nextInvoiceDate': datetime.now().strftime('%Y-%m-%d'),
+            'endDate': ''
+        }
+    else:
+        initial_data = initial_data_from_session
 
     with st.form(key='invoice_form'):
         # Safely determine initial date values for st.date_input
         invoice_date_val = datetime.now().date()
-        if initial_data['invoiceDate']:
+        if initial_data.get('invoiceDate'):
             try:
                 invoice_date_val = datetime.strptime(initial_data['invoiceDate'], '%Y-%m-%d').date()
             except ValueError:
-                pass # Keep default if parsing fails
+                pass
 
         next_invoice_date_val = datetime.now().date()
-        if initial_data['nextInvoiceDate']:
+        if initial_data.get('nextInvoiceDate'):
             try:
                 next_invoice_date_val = datetime.strptime(initial_data['nextInvoiceDate'], '%Y-%m-%d').date()
             except ValueError:
                 pass
 
         end_date_val = None
-        if initial_data['endDate']:
+        if initial_data.get('endDate'):
             try:
                 end_date_val = datetime.strptime(initial_data['endDate'], '%Y-%m-%d').date()
             except ValueError:
@@ -745,10 +750,10 @@ def add_edit_invoice_form(on_add_invoice, on_update_invoice, lang, currency):
 
         # Use st.session_state for line items in the form to persist changes
         if 'form_line_items' not in st.session_state or not st.session_state.form_line_items:
-            st.session_state.form_line_items = initial_data['lineItems']
+            st.session_state.form_line_items = initial_data.get('lineItems', [{'description': '', 'quantity': 1.0, 'unitPrice': 0.0}])
         elif is_editing and st.session_state.editing_invoice_id != st.session_state.get('last_edited_invoice_id_for_form'):
             # Load new data when switching invoices in edit mode
-            st.session_state.form_line_items = initial_data['lineItems']
+            st.session_state.form_line_items = initial_data.get('lineItems', [{'description': '', 'quantity': 1.0, 'unitPrice': 0.0}])
             st.session_state.last_edited_invoice_id_for_form = st.session_state.editing_invoice_id
 
 
@@ -828,18 +833,23 @@ def add_edit_estimate_form(on_add_estimate, on_update_estimate, lang, currency):
     
     st.header(get_translation(lang, 'addEstimateTitle') if not is_editing else f"{get_translation(lang, 'edit')} {get_translation(lang, 'estimate')}")
 
-    initial_data = st.session_state.get('edited_estimate_data', {
-        'estimateDate': datetime.now().strftime('%Y-%m-%d'),
-        'clientName': '',
-        'clientEmail': '',
-        'lineItems': [{'description': '', 'quantity': 1.0, 'unitPrice': 0.0}],
-        'status': 'draft'
-    })
+    # Ensure initial_data is always a dictionary
+    initial_data_from_session = st.session_state.get('edited_estimate_data')
+    if initial_data_from_session is None:
+        initial_data = {
+            'estimateDate': datetime.now().strftime('%Y-%m-%d'),
+            'clientName': '',
+            'clientEmail': '',
+            'lineItems': [{'description': '', 'quantity': 1.0, 'unitPrice': 0.0}],
+            'status': 'draft'
+        }
+    else:
+        initial_data = initial_data_from_session
 
     with st.form(key='estimate_form'):
         # Safely determine initial date value for st.date_input
         estimate_date_val = datetime.now().date()
-        if initial_data['estimateDate']:
+        if initial_data.get('estimateDate'):
             try:
                 estimate_date_val = datetime.strptime(initial_data['estimateDate'], '%Y-%m-%d').date()
             except ValueError:
@@ -854,9 +864,9 @@ def add_edit_estimate_form(on_add_estimate, on_update_estimate, lang, currency):
         st.subheader(get_translation(lang, 'lineItems'))
 
         if 'form_estimate_line_items' not in st.session_state or not st.session_state.form_estimate_line_items:
-            st.session_state.form_estimate_line_items = initial_data['lineItems']
+            st.session_state.form_estimate_line_items = initial_data.get('lineItems', [{'description': '', 'quantity': 1.0, 'unitPrice': 0.0}])
         elif is_editing and st.session_state.editing_estimate_id != st.session_state.get('last_edited_estimate_id_for_form'):
-            st.session_state.form_estimate_line_items = initial_data['lineItems']
+            st.session_state.form_estimate_line_items = initial_data.get('lineItems', [{'description': '', 'quantity': 1.0, 'unitPrice': 0.0}])
             st.session_state.last_edited_estimate_id_for_form = st.session_state.editing_estimate_id
 
 
