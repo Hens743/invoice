@@ -718,75 +718,44 @@ def add_edit_invoice_form(on_add_invoice, on_update_invoice, lang, currency):
     else:
         initial_data = initial_data_from_session
 
+    # Initialize form_line_items in session state if not present or if switching invoices in edit mode
+    if 'form_line_items' not in st.session_state or \
+       (is_editing and st.session_state.editing_invoice_id != st.session_state.get('last_edited_invoice_id_for_form')):
+        st.session_state.form_line_items = initial_data.get('lineItems', [{'description': '', 'quantity': 1.0, 'unitPrice': 0.0}])
+        st.session_state.last_edited_invoice_id_for_form = st.session_state.editing_invoice_id
+
+    # Safely determine initial date values for st.date_input
+    invoice_date_val = datetime.now().date()
+    if initial_data.get('invoiceDate'):
+        try:
+            invoice_date_val = datetime.strptime(initial_data['invoiceDate'], '%Y-%m-%d').date()
+        except ValueError:
+            pass
+
+    next_invoice_date_val = datetime.now().date()
+    if initial_data.get('nextInvoiceDate'):
+        try:
+            next_invoice_date_val = datetime.strptime(initial_data['nextInvoiceDate'], '%Y-%m-%d').date()
+        except ValueError:
+            pass
+
+    end_date_val = None
+    if initial_data.get('endDate'):
+        try:
+            end_date_val = datetime.strptime(initial_data['endDate'], '%Y-%m-%d').date()
+        except ValueError:
+            pass
+
+    # --- Main Form for Invoice Details ---
     with st.form(key='invoice_form'):
-        # Safely determine initial date values for st.date_input
-        invoice_date_val = datetime.now().date()
-        if initial_data.get('invoiceDate'):
-            try:
-                invoice_date_val = datetime.strptime(initial_data['invoiceDate'], '%Y-%m-%d').date()
-            except ValueError:
-                pass
-
-        next_invoice_date_val = datetime.now().date()
-        if initial_data.get('nextInvoiceDate'):
-            try:
-                next_invoice_date_val = datetime.strptime(initial_data['nextInvoiceDate'], '%Y-%m-%d').date()
-            except ValueError:
-                pass
-
-        end_date_val = None
-        if initial_data.get('endDate'):
-            try:
-                end_date_val = datetime.strptime(initial_data['endDate'], '%Y-%m-%d').date()
-            except ValueError:
-                pass
-
-        invoice_date = st.date_input(get_translation(lang, 'invoiceDate'), value=invoice_date_val)
         client_name = st.text_input(get_translation(lang, 'clientName'), value=initial_data['clientName'])
         client_email = st.text_input(get_translation(lang, 'clientEmail'), value=initial_data['clientEmail'])
-
-        st.markdown("---")
-        st.subheader(get_translation(lang, 'lineItems'))
-
-        # Use st.session_state for line items in the form to persist changes
-        if 'form_line_items' not in st.session_state or not st.session_state.form_line_items:
-            st.session_state.form_line_items = initial_data.get('lineItems', [{'description': '', 'quantity': 1.0, 'unitPrice': 0.0}])
-        elif is_editing and st.session_state.editing_invoice_id != st.session_state.get('last_edited_invoice_id_for_form'):
-            # Load new data when switching invoices in edit mode
-            st.session_state.form_line_items = initial_data.get('lineItems', [{'description': '', 'quantity': 1.0, 'unitPrice': 0.0}])
-            st.session_state.last_edited_invoice_id_for_form = st.session_state.editing_invoice_id
-
-
-        new_line_items = []
-        for i, item in enumerate(st.session_state.form_line_items):
-            st.markdown(f"**{get_translation(lang, 'lineItems')} {i+1}**")
-            col_desc, col_qty, col_price, col_amt, col_remove = st.columns([3, 1, 1, 1, 0.5])
-            with col_desc:
-                item['description'] = st.text_input(get_translation(lang, 'description'), value=item['description'], key=f"desc_{i}_{is_editing}")
-            with col_qty:
-                item['quantity'] = st.number_input(get_translation(lang, 'quantity'), min_value=0.0, value=float(item['quantity']), key=f"qty_{i}_{is_editing}")
-            with col_price:
-                item['unitPrice'] = st.number_input(get_translation(lang, 'unitPrice'), min_value=0.0, value=float(item['unitPrice']), format="%.2f", key=f"price_{i}_{is_editing}")
-            with col_amt:
-                st.text_input(get_translation(lang, 'amount'), value=format_currency(float(item['quantity']) * float(item['unitPrice']), currency), disabled=True, key=f"amt_{i}_{is_editing}")
-            with col_remove:
-                st.markdown("<br>", unsafe_allow_html=True) # Spacer
-                if st.button(get_translation(lang, 'remove'), key=f"remove_{i}_{is_editing}"):
-                    st.session_state.form_line_items.pop(i)
-                    st.rerun() # Rerun to update the list
-            new_line_items.append(item)
-        st.session_state.form_line_items = new_line_items # Update session state after loop
-
-        if st.button(get_translation(lang, 'addLineItem'), key=f"add_line_item_{is_editing}"):
-            st.session_state.form_line_items.append({'description': '', 'quantity': 1.0, 'unitPrice': 0.0})
-            st.rerun() # Rerun to show new line item
-
-        st.markdown(f"**{get_translation(lang, 'totalAmount')}:** {format_currency(calculate_total(st.session_state.form_line_items), currency)}")
-        st.markdown("---")
+        invoice_date = st.date_input(get_translation(lang, 'invoiceDate'), value=invoice_date_val)
 
         is_recurring = st.checkbox(get_translation(lang, 'recurringInvoice'), value=initial_data['isRecurring'])
         recurrence_frequency = initial_data['recurrenceFrequency']
-
+        next_invoice_date = None
+        end_date = None
 
         if is_recurring:
             recurrence_frequency = st.selectbox(get_translation(lang, 'recurrenceFrequency'), ['monthly', 'quarterly', 'annually'], index=['monthly', 'quarterly', 'annually'].index(initial_data['recurrenceFrequency']))
@@ -799,12 +768,12 @@ def add_edit_invoice_form(on_add_invoice, on_update_invoice, lang, currency):
                 'invoiceDate': invoice_date.strftime('%Y-%m-%d'),
                 'clientName': client_name,
                 'clientEmail': client_email,
-                'lineItems': st.session_state.form_line_items,
+                'lineItems': st.session_state.form_line_items, # Get the latest from session state
                 'totalAmount': calculate_total(st.session_state.form_line_items),
                 'isRecurring': is_recurring,
-                'recurrenceFrequency': recurrence_frequency if is_recurring else None,
-                'nextInvoiceDate': next_invoice_date.strftime('%Y-%m-%d') if is_recurring else None,
-                'endDate': end_date.strftime('%Y-%m-%d') if is_recurring and end_date else None,
+                'recurrenceFrequency': recurrence_frequency,
+                'nextInvoiceDate': next_invoice_date.strftime('%Y-%m-%d') if next_invoice_date else None,
+                'endDate': end_date.strftime('%Y-%m-%d') if end_date else None,
             }
             if is_editing:
                 on_update_invoice(st.session_state.editing_invoice_id, invoice_data)
@@ -818,6 +787,35 @@ def add_edit_invoice_form(on_add_invoice, on_update_invoice, lang, currency):
             st.session_state.form_line_items = [{'description': '', 'quantity': 1.0, 'unitPrice': 0.0}] # Reset form line items
             st.session_state.last_edited_invoice_id_for_form = None # Clear this flag
             st.rerun()
+
+    # --- Line Item Management (OUTSIDE the form) ---
+    st.markdown("---")
+    st.subheader(get_translation(lang, 'lineItems'))
+    
+    # Display and allow editing of existing line items
+    for i, item in enumerate(st.session_state.form_line_items):
+        st.markdown(f"**{get_translation(lang, 'lineItems')} {i+1}**")
+        col_desc, col_qty, col_price, col_amt, col_remove = st.columns([3, 1, 1, 1, 0.5])
+        with col_desc:
+            st.session_state.form_line_items[i]['description'] = st.text_input(get_translation(lang, 'description'), value=item['description'], key=f"desc_{i}_{is_editing}_outside")
+        with col_qty:
+            st.session_state.form_line_items[i]['quantity'] = st.number_input(get_translation(lang, 'quantity'), min_value=0.0, value=float(item['quantity']), key=f"qty_{i}_{is_editing}_outside")
+        with col_price:
+            st.session_state.form_line_items[i]['unitPrice'] = st.number_input(get_translation(lang, 'unitPrice'), min_value=0.0, value=float(item['unitPrice']), format="%.2f", key=f"price_{i}_{is_editing}_outside")
+        with col_amt:
+            st.text_input(get_translation(lang, 'amount'), value=format_currency(float(item['quantity']) * float(item['unitPrice']), currency), disabled=True, key=f"amt_{i}_{is_editing}_outside")
+        with col_remove:
+            st.markdown("<br>", unsafe_allow_html=True) # Spacer
+            if st.button(get_translation(lang, 'remove'), key=f"remove_{i}_{is_editing}_outside"):
+                st.session_state.form_line_items.pop(i)
+                st.rerun() # Rerun to update the list
+
+    if st.button(get_translation(lang, 'addLineItem'), key=f"add_line_item_{is_editing}_outside"):
+        st.session_state.form_line_items.append({'description': '', 'quantity': 1.0, 'unitPrice': 0.0})
+        st.rerun() # Rerun to show new line item
+
+    st.markdown(f"**{get_translation(lang, 'totalAmount')}:** {format_currency(calculate_total(st.session_state.form_line_items), currency)}")
+    st.markdown("---")
 
     if st.button(get_translation(lang, 'cancel'), key=f"cancel_invoice_form_{is_editing}"):
         st.session_state.show_add_invoice_modal = False
@@ -846,56 +844,26 @@ def add_edit_estimate_form(on_add_estimate, on_update_estimate, lang, currency):
     else:
         initial_data = initial_data_from_session
 
-    with st.form(key='estimate_form'):
-        # Safely determine initial date value for st.date_input
-        estimate_date_val = datetime.now().date()
-        if initial_data.get('estimateDate'):
-            try:
-                estimate_date_val = datetime.strptime(initial_data['estimateDate'], '%Y-%m-%d').date()
-            except ValueError:
-                pass # Keep default if parsing fails
+    # Initialize form_estimate_line_items in session state if not present or if switching estimates in edit mode
+    if 'form_estimate_line_items' not in st.session_state or \
+       (is_editing and st.session_state.editing_estimate_id != st.session_state.get('last_edited_estimate_id_for_form')):
+        st.session_state.form_estimate_line_items = initial_data.get('lineItems', [{'description': '', 'quantity': 1.0, 'unitPrice': 0.0}])
+        st.session_state.last_edited_estimate_id_for_form = st.session_state.editing_estimate_id
 
-        estimate_date = st.date_input(get_translation(lang, 'date'), value=estimate_date_val)
+    # Safely determine initial date value for st.date_input
+    estimate_date_val = datetime.now().date()
+    if initial_data.get('estimateDate'):
+        try:
+            estimate_date_val = datetime.strptime(initial_data['estimateDate'], '%Y-%m-%d').date()
+        except ValueError:
+            pass
+
+    # --- Main Form for Estimate Details ---
+    with st.form(key='estimate_form'):
         client_name = st.text_input(get_translation(lang, 'clientName'), value=initial_data['clientName'])
         client_email = st.text_input(get_translation(lang, 'clientEmail'), value=initial_data['clientEmail'])
+        estimate_date = st.date_input(get_translation(lang, 'date'), value=estimate_date_val)
         status = st.selectbox(get_translation(lang, 'status'), ['draft', 'sent', 'accepted', 'rejected'], index=['draft', 'sent', 'accepted', 'rejected'].index(initial_data['status']))
-
-        st.markdown("---")
-        st.subheader(get_translation(lang, 'lineItems'))
-
-        if 'form_estimate_line_items' not in st.session_state or not st.session_state.form_estimate_line_items:
-            st.session_state.form_estimate_line_items = initial_data.get('lineItems', [{'description': '', 'quantity': 1.0, 'unitPrice': 0.0}])
-        elif is_editing and st.session_state.editing_estimate_id != st.session_state.get('last_edited_estimate_id_for_form'):
-            st.session_state.form_estimate_line_items = initial_data.get('lineItems', [{'description': '', 'quantity': 1.0, 'unitPrice': 0.0}])
-            st.session_state.last_edited_estimate_id_for_form = st.session_state.editing_estimate_id
-
-
-        new_line_items = []
-        for i, item in enumerate(st.session_state.form_estimate_line_items):
-            st.markdown(f"**{get_translation(lang, 'lineItems')} {i+1}**")
-            col_desc, col_qty, col_price, col_amt, col_remove = st.columns([3, 1, 1, 1, 0.5])
-            with col_desc:
-                item['description'] = st.text_input(get_translation(lang, 'description'), value=item['description'], key=f"est_desc_{i}_{is_editing}")
-            with col_qty:
-                item['quantity'] = st.number_input(get_translation(lang, 'quantity'), min_value=0.0, value=float(item['quantity']), key=f"est_qty_{i}_{is_editing}")
-            with col_price:
-                item['unitPrice'] = st.number_input(get_translation(lang, 'unitPrice'), min_value=0.0, value=float(item['unitPrice']), format="%.2f", key=f"est_price_{i}_{is_editing}")
-            with col_amt:
-                st.text_input(get_translation(lang, 'amount'), value=format_currency(float(item['quantity']) * float(item['unitPrice']), currency), disabled=True, key=f"est_amt_{i}_{is_editing}")
-            with col_remove:
-                st.markdown("<br>", unsafe_allow_html=True) # Spacer
-                if st.button(get_translation(lang, 'remove'), key=f"est_remove_{i}_{is_editing}"):
-                    st.session_state.form_estimate_line_items.pop(i)
-                    st.rerun()
-            new_line_items.append(item)
-        st.session_state.form_estimate_line_items = new_line_items
-
-        if st.button(get_translation(lang, 'addLineItem'), key=f"est_add_line_item_{is_editing}"):
-            st.session_state.form_estimate_line_items.append({'description': '', 'quantity': 1.0, 'unitPrice': 0.0})
-            st.rerun()
-
-        st.markdown(f"**{get_translation(lang, 'totalAmount')}:** {format_currency(calculate_total(st.session_state.form_estimate_line_items), currency)}")
-        st.markdown("---")
 
         submitted = st.form_submit_button(get_translation(lang, 'createEstimate') if not is_editing else get_translation(lang, 'save'))
         if submitted:
@@ -903,7 +871,7 @@ def add_edit_estimate_form(on_add_estimate, on_update_estimate, lang, currency):
                 'estimateDate': estimate_date.strftime('%Y-%m-%d'),
                 'clientName': client_name,
                 'clientEmail': client_email,
-                'lineItems': st.session_state.form_estimate_line_items,
+                'lineItems': st.session_state.form_estimate_line_items, # Get the latest from session state
                 'totalAmount': calculate_total(st.session_state.form_estimate_line_items),
                 'status': status
             }
@@ -918,6 +886,37 @@ def add_edit_estimate_form(on_add_estimate, on_update_estimate, lang, currency):
             st.session_state.form_estimate_line_items = [{'description': '', 'quantity': 1.0, 'unitPrice': 0.0}]
             st.session_state.last_edited_estimate_id_for_form = None
             st.rerun()
+
+    # --- Line Item Management (OUTSIDE the form) ---
+    st.markdown("---")
+    st.subheader(get_translation(lang, 'lineItems'))
+
+    new_line_items = []
+    for i, item in enumerate(st.session_state.form_estimate_line_items):
+        st.markdown(f"**{get_translation(lang, 'lineItems')} {i+1}**")
+        col_desc, col_qty, col_price, col_amt, col_remove = st.columns([3, 1, 1, 1, 0.5])
+        with col_desc:
+            st.session_state.form_estimate_line_items[i]['description'] = st.text_input(get_translation(lang, 'description'), value=item['description'], key=f"est_desc_{i}_{is_editing}_outside")
+        with col_qty:
+            st.session_state.form_estimate_line_items[i]['quantity'] = st.number_input(get_translation(lang, 'quantity'), min_value=0.0, value=float(item['quantity']), key=f"est_qty_{i}_{is_editing}_outside")
+        with col_price:
+            st.session_state.form_estimate_line_items[i]['unitPrice'] = st.number_input(get_translation(lang, 'unitPrice'), min_value=0.0, value=float(item['unitPrice']), format="%.2f", key=f"est_price_{i}_{is_editing}_outside")
+        with col_amt:
+            st.text_input(get_translation(lang, 'amount'), value=format_currency(float(item['quantity']) * float(item['unitPrice']), currency), disabled=True, key=f"est_amt_{i}_{is_editing}_outside")
+        with col_remove:
+            st.markdown("<br>", unsafe_allow_html=True) # Spacer
+            if st.button(get_translation(lang, 'remove'), key=f"est_remove_{i}_{is_editing}_outside"):
+                st.session_state.form_estimate_line_items.pop(i)
+                st.rerun()
+            new_line_items.append(item)
+    st.session_state.form_estimate_line_items = new_line_items
+
+    if st.button(get_translation(lang, 'addLineItem'), key=f"est_add_line_item_{is_editing}_outside"):
+        st.session_state.form_estimate_line_items.append({'description': '', 'quantity': 1.0, 'unitPrice': 0.0})
+        st.rerun()
+
+    st.markdown(f"**{get_translation(lang, 'totalAmount')}:** {format_currency(calculate_total(st.session_state.form_estimate_line_items), currency)}")
+    st.markdown("---")
 
     if st.button(get_translation(lang, 'cancel'), key=f"cancel_estimate_form_{is_editing}"):
         st.session_state.show_add_estimate_modal = False
@@ -1149,24 +1148,24 @@ def main():
         st.markdown(f"<h1 style='text-align: center;'>{get_translation(st.session_state.language, item_type).upper()} #{item_to_print[f'{item_type}Number']}</h1>", unsafe_allow_html=True)
         
         st.write(f"**{get_translation(st.session_state.language, 'date')}:** {item_to_print[f'{item_type}Date']}")
-        st.write(f"**{get_translation(st.session_state.language, 'clientName')}:** {item_to_print['clientName']}")
-        st.write(f"**{get_translation(st.session_state.language, 'clientEmail')}:** {item_to_print['clientEmail']}")
+        st.write(f"**{get_translation(lang, 'clientName')}:** {item_to_print['clientName']}")
+        st.write(f"**{get_translation(lang, 'clientEmail')}:** {item_to_print['clientEmail']}")
         
         if item_type == 'estimate':
-            st.write(f"**{get_translation(st.session_state.language, 'status')}:** {get_translation(st.session_state.language, item_to_print['status'])}")
+            st.write(f"**{get_translation(lang, 'status')}:** {get_translation(lang, item_to_print['status'])}")
 
-        st.markdown("### " + get_translation(st.session_state.language, 'lineItems'))
+        st.markdown("### " + get_translation(lang, 'lineItems'))
         printable_line_item_data = []
         for i, item in enumerate(item_to_print['lineItems']):
             printable_line_item_data.append({
                 '#': i + 1,
-                get_translation(st.session_state.language, 'description'): item['description'],
-                get_translation(st.session_state.language, 'quantity'): item['quantity'],
-                get_translation(st.session_state.language, 'unitPrice'): format_currency(item['unitPrice'], st.session_state.currency),
-                get_translation(st.session_state.language, 'amount'): format_currency(float(item['quantity']) * float(item['unitPrice']), st.session_state.currency)
+                get_translation(lang, 'description'): item['description'],
+                get_translation(lang, 'quantity'): item['quantity'],
+                get_translation(lang, 'unitPrice'): format_currency(item['unitPrice'], st.session_state.currency),
+                get_translation(lang, 'amount'): format_currency(float(item['quantity']) * float(item['unitPrice']), st.session_state.currency)
             })
         st.table(pd.DataFrame(printable_line_item_data))
-        st.markdown(f"**{get_translation(st.session_state.language, 'totalAmount')}:** {format_currency(calculate_total(item_to_print['lineItems']), st.session_state.currency)}")
+        st.markdown(f"**{get_translation(lang, 'totalAmount')}:** {format_currency(calculate_total(item_to_print['lineItems']), st.session_state.currency)}")
         st.markdown('</div>', unsafe_allow_html=True)
         st.info("Use your browser's print function (Ctrl+P or Cmd+P) to save this as a PDF.")
 
