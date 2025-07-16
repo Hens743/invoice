@@ -10,6 +10,13 @@ def initialize_database():
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
 
+    # Drop tables if they exist to ensure schema is up-to-date during development
+    cursor.execute('DROP TABLE IF EXISTS LineItems')
+    cursor.execute('DROP TABLE IF EXISTS Invoices')
+    cursor.execute('DROP TABLE IF EXISTS EstimateLineItems')
+    cursor.execute('DROP TABLE IF EXISTS Estimates')
+    cursor.execute('DROP TABLE IF EXISTS Counters')
+
     # Create Invoices table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS Invoices (
