@@ -16,13 +16,23 @@ def initialize_database():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             invoiceNumber TEXT NOT NULL UNIQUE,
             invoiceDate TEXT NOT NULL,
+            dueDate TEXT, -- Added due date
             clientName TEXT NOT NULL,
             clientEmail TEXT,
-            totalAmount REAL NOT NULL,
+            sellerName TEXT, -- Added seller info
+            sellerAddress TEXT,
+            sellerOrgNumber TEXT,
+            sellerVatRegistered INTEGER DEFAULT 0,
+            deliveryDetails TEXT, -- Added delivery details
+            vatRate REAL DEFAULT 0.0, -- Added VAT rate
+            totalAmount REAL NOT NULL, -- This will now be totalAmountInclVAT
+            totalAmountExclVAT REAL, -- Added total excluding VAT
+            totalVAT REAL, -- Added total VAT
             isRecurring INTEGER DEFAULT 0,
             recurrenceFrequency TEXT,
             nextInvoiceDate TEXT,
-            endDate TEXT
+            endDate TEXT,
+            isCancelled INTEGER DEFAULT 0 -- Added for cancelled invoices
         )
     ''')
 
@@ -34,6 +44,9 @@ def initialize_database():
             description TEXT NOT NULL,
             quantity INTEGER NOT NULL,
             unitPrice REAL NOT NULL,
+            amountExclVAT REAL, -- Added line item amount excl VAT
+            vatAmount REAL, -- Added line item VAT amount
+            amountInclVAT REAL, -- Added line item amount incl VAT
             FOREIGN KEY (invoiceId) REFERENCES Invoices(id) ON DELETE CASCADE
         )
     ''')
@@ -46,7 +59,15 @@ def initialize_database():
             estimateDate TEXT NOT NULL,
             clientName TEXT NOT NULL,
             clientEmail TEXT,
-            totalAmount REAL NOT NULL,
+            sellerName TEXT, -- Added seller info
+            sellerAddress TEXT,
+            sellerOrgNumber TEXT,
+            sellerVatRegistered INTEGER DEFAULT 0,
+            deliveryDetails TEXT, -- Added delivery details
+            vatRate REAL DEFAULT 0.0, -- Added VAT rate
+            totalAmount REAL NOT NULL, -- This will now be totalAmountInclVAT
+            totalAmountExclVAT REAL, -- Added total excluding VAT
+            totalVAT REAL, -- Added total VAT
             status TEXT NOT NULL DEFAULT 'draft'
         )
     ''')
@@ -59,6 +80,9 @@ def initialize_database():
             description TEXT NOT NULL,
             quantity INTEGER NOT NULL,
             unitPrice REAL NOT NULL,
+            amountExclVAT REAL, -- Added line item amount excl VAT
+            vatAmount REAL, -- Added line item VAT amount
+            amountInclVAT REAL, -- Added line item amount incl VAT
             FOREIGN KEY (estimateId) REFERENCES Estimates(id) ON DELETE CASCADE
         )
     ''')
@@ -94,14 +118,17 @@ def add_invoice(invoice_data):
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute(
-        'INSERT INTO Invoices (invoiceNumber, invoiceDate, clientName, clientEmail, totalAmount, isRecurring, recurrenceFrequency, nextInvoiceDate, endDate) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        (invoice_data['invoiceNumber'], invoice_data['invoiceDate'], invoice_data['clientName'], invoice_data['clientEmail'], invoice_data['totalAmount'], 1 if invoice_data['isRecurring'] else 0, invoice_data['recurrenceFrequency'], invoice_data['nextInvoiceDate'], invoice_data['endDate'])
+        'INSERT INTO Invoices (invoiceNumber, invoiceDate, dueDate, clientName, clientEmail, sellerName, sellerAddress, sellerOrgNumber, sellerVatRegistered, deliveryDetails, vatRate, totalAmount, totalAmountExclVAT, totalVAT, isRecurring, recurrenceFrequency, nextInvoiceDate, endDate, isCancelled) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        (invoice_data['invoiceNumber'], invoice_data['invoiceDate'], invoice_data['dueDate'], invoice_data['clientName'], invoice_data['clientEmail'],
+         invoice_data['sellerName'], invoice_data['sellerAddress'], invoice_data['sellerOrgNumber'], 1 if invoice_data['sellerVatRegistered'] else 0,
+         invoice_data['deliveryDetails'], invoice_data['vatRate'], invoice_data['totalAmount'], invoice_data['totalAmountExclVAT'], invoice_data['totalVAT'],
+         1 if invoice_data['isRecurring'] else 0, invoice_data['recurrenceFrequency'], invoice_data['nextInvoiceDate'], invoice_data['endDate'], 0) # isCancelled defaults to 0
     )
     invoice_id = cursor.lastrowid
     for item in invoice_data['lineItems']:
         cursor.execute(
-            'INSERT INTO LineItems (invoiceId, description, quantity, unitPrice) VALUES (?, ?, ?, ?)',
-            (invoice_id, item['description'], item['quantity'], item['unitPrice'])
+            'INSERT INTO LineItems (invoiceId, description, quantity, unitPrice, amountExclVAT, vatAmount, amountInclVAT) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            (invoice_id, item['description'], item['quantity'], item['unitPrice'], item['amountExclVAT'], item['vatAmount'], item['amountInclVAT'])
         )
     conn.commit()
     conn.close()
@@ -119,45 +146,60 @@ def get_invoices():
             'id': inv_raw[0],
             'invoiceNumber': inv_raw[1],
             'invoiceDate': inv_raw[2],
-            'clientName': inv_raw[3],
-            'clientEmail': inv_raw[4],
-            'totalAmount': inv_raw[5],
-            'isRecurring': bool(inv_raw[6]),
-            'recurrenceFrequency': inv_raw[7],
-            'nextInvoiceDate': inv_raw[8],
-            'endDate': inv_raw[9]
+            'dueDate': inv_raw[3], # Added
+            'clientName': inv_raw[4],
+            'clientEmail': inv_raw[5],
+            'sellerName': inv_raw[6], # Added
+            'sellerAddress': inv_raw[7],
+            'sellerOrgNumber': inv_raw[8],
+            'sellerVatRegistered': bool(inv_raw[9]),
+            'deliveryDetails': inv_raw[10], # Added
+            'vatRate': inv_raw[11], # Added
+            'totalAmount': inv_raw[12], # This is totalAmountInclVAT
+            'totalAmountExclVAT': inv_raw[13], # Added
+            'totalVAT': inv_raw[14], # Added
+            'isRecurring': bool(inv_raw[15]),
+            'recurrenceFrequency': inv_raw[16],
+            'nextInvoiceDate': inv_raw[17],
+            'endDate': inv_raw[18],
+            'isCancelled': bool(inv_raw[19]) # Added
         }
         cursor.execute('SELECT * FROM LineItems WHERE invoiceId = ?', (invoice_dict['id'],))
         line_items_raw = cursor.fetchall()
         invoice_dict['lineItems'] = [
-            {'id': li[0], 'invoiceId': li[1], 'description': li[2], 'quantity': li[3], 'unitPrice': li[4]}
+            {'id': li[0], 'invoiceId': li[1], 'description': li[2], 'quantity': li[3], 'unitPrice': li[4],
+             'amountExclVAT': li[5], 'vatAmount': li[6], 'amountInclVAT': li[7]} # Added VAT fields
             for li in line_items_raw
         ]
         invoices.append(invoice_dict)
     conn.close()
-    return invoices
+    # Filter out cancelled invoices unless explicitly requested for viewing (not implemented in UI for now)
+    return [inv for inv in invoices if not inv['isCancelled']]
 
 def update_invoice(invoice_id, updated_data):
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute(
-        'UPDATE Invoices SET invoiceDate = ?, clientName = ?, clientEmail = ?, totalAmount = ?, isRecurring = ?, recurrenceFrequency = ?, nextInvoiceDate = ?, endDate = ? WHERE id = ?',
-        (updated_data['invoiceDate'], updated_data['clientName'], updated_data['clientEmail'], updated_data['totalAmount'], 1 if updated_data['isRecurring'] else 0, updated_data['recurrenceFrequency'], updated_data['nextInvoiceDate'], updated_data['endDate'], invoice_id)
+        'UPDATE Invoices SET invoiceDate = ?, dueDate = ?, clientName = ?, clientEmail = ?, sellerName = ?, sellerAddress = ?, sellerOrgNumber = ?, sellerVatRegistered = ?, deliveryDetails = ?, vatRate = ?, totalAmount = ?, totalAmountExclVAT = ?, totalVAT = ?, isRecurring = ?, recurrenceFrequency = ?, nextInvoiceDate = ?, endDate = ?, isCancelled = ? WHERE id = ?',
+        (updated_data['invoiceDate'], updated_data['dueDate'], updated_data['clientName'], updated_data['clientEmail'],
+         updated_data['sellerName'], updated_data['sellerAddress'], updated_data['sellerOrgNumber'], 1 if updated_data['sellerVatRegistered'] else 0,
+         updated_data['deliveryDetails'], updated_data['vatRate'], updated_data['totalAmount'], updated_data['totalAmountExclVAT'], updated_data['totalVAT'],
+         1 if updated_data['isRecurring'] else 0, updated_data['recurrenceFrequency'], updated_data['nextInvoiceDate'], updated_data['endDate'], 1 if updated_data['isCancelled'] else 0, invoice_id)
     )
     cursor.execute('DELETE FROM LineItems WHERE invoiceId = ?', (invoice_id,))
     for item in updated_data['lineItems']:
         cursor.execute(
-            'INSERT INTO LineItems (invoiceId, description, quantity, unitPrice) VALUES (?, ?, ?, ?)',
-            (invoice_id, item['description'], item['quantity'], item['unitPrice'])
+            'INSERT INTO LineItems (invoiceId, description, quantity, unitPrice, amountExclVAT, vatAmount, amountInclVAT) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            (invoice_id, item['description'], item['quantity'], item['unitPrice'], item['amountExclVAT'], item['vatAmount'], item['amountInclVAT'])
         )
     conn.commit()
     conn.close()
     return True
 
-def delete_invoice(invoice_id):
+def cancel_invoice(invoice_id):
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    cursor.execute('DELETE FROM Invoices WHERE id = ?', (invoice_id,))
+    cursor.execute('UPDATE Invoices SET isCancelled = 1 WHERE id = ?', (invoice_id,))
     conn.commit()
     conn.close()
     return True
@@ -166,14 +208,17 @@ def add_estimate(estimate_data):
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute(
-        'INSERT INTO Estimates (estimateNumber, estimateDate, clientName, clientEmail, totalAmount, status) VALUES (?, ?, ?, ?, ?, ?)',
-        (estimate_data['estimateNumber'], estimate_data['estimateDate'], estimate_data['clientName'], estimate_data['clientEmail'], estimate_data['totalAmount'], estimate_data['status'])
+        'INSERT INTO Estimates (estimateNumber, estimateDate, clientName, clientEmail, sellerName, sellerAddress, sellerOrgNumber, sellerVatRegistered, deliveryDetails, vatRate, totalAmount, totalAmountExclVAT, totalVAT, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        (estimate_data['estimateNumber'], estimate_data['estimateDate'], estimate_data['clientName'], estimate_data['clientEmail'],
+         estimate_data['sellerName'], estimate_data['sellerAddress'], estimate_data['sellerOrgNumber'], 1 if estimate_data['sellerVatRegistered'] else 0,
+         estimate_data['deliveryDetails'], estimate_data['vatRate'], estimate_data['totalAmount'], estimate_data['totalAmountExclVAT'], estimate_data['totalVAT'],
+         estimate_data['status'])
     )
     estimate_id = cursor.lastrowid
     for item in estimate_data['lineItems']:
         cursor.execute(
-            'INSERT INTO EstimateLineItems (estimateId, description, quantity, unitPrice) VALUES (?, ?, ?, ?)',
-            (estimate_id, item['description'], item['quantity'], item['unitPrice'])
+            'INSERT INTO EstimateLineItems (estimateId, description, quantity, unitPrice, amountExclVAT, vatAmount, amountInclVAT) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            (estimate_id, item['description'], item['quantity'], item['unitPrice'], item['amountExclVAT'], item['vatAmount'], item['amountInclVAT'])
         )
     conn.commit()
     conn.close()
@@ -193,13 +238,22 @@ def get_estimates():
             'estimateDate': est_raw[2],
             'clientName': est_raw[3],
             'clientEmail': est_raw[4],
-            'totalAmount': est_raw[5],
-            'status': est_raw[6]
+            'sellerName': est_raw[5], # Added
+            'sellerAddress': est_raw[6],
+            'sellerOrgNumber': est_raw[7],
+            'sellerVatRegistered': bool(est_raw[8]),
+            'deliveryDetails': est_raw[9], # Added
+            'vatRate': est_raw[10], # Added
+            'totalAmount': est_raw[11], # This is totalAmountInclVAT
+            'totalAmountExclVAT': est_raw[12], # Added
+            'totalVAT': est_raw[13], # Added
+            'status': est_raw[14]
         }
         cursor.execute('SELECT * FROM EstimateLineItems WHERE estimateId = ?', (estimate_dict['id'],))
         line_items_raw = cursor.fetchall()
         estimate_dict['lineItems'] = [
-            {'id': li[0], 'estimateId': li[1], 'description': li[2], 'quantity': li[3], 'unitPrice': li[4]}
+            {'id': li[0], 'estimateId': li[1], 'description': li[2], 'quantity': li[3], 'unitPrice': li[4],
+             'amountExclVAT': li[5], 'vatAmount': li[6], 'amountInclVAT': li[7]} # Added VAT fields
             for li in line_items_raw
         ]
         estimates.append(estimate_dict)
@@ -210,14 +264,17 @@ def update_estimate(estimate_id, updated_data):
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute(
-        'UPDATE Estimates SET estimateDate = ?, clientName = ?, clientEmail = ?, totalAmount = ?, status = ? WHERE id = ?',
-        (updated_data['estimateDate'], updated_data['clientName'], updated_data['clientEmail'], updated_data['totalAmount'], updated_data['status'], estimate_id)
+        'UPDATE Estimates SET estimateDate = ?, clientName = ?, clientEmail = ?, sellerName = ?, sellerAddress = ?, sellerOrgNumber = ?, sellerVatRegistered = ?, deliveryDetails = ?, vatRate = ?, totalAmount = ?, totalAmountExclVAT = ?, totalVAT = ?, status = ? WHERE id = ?',
+        (updated_data['estimateDate'], updated_data['clientName'], updated_data['clientEmail'],
+         updated_data['sellerName'], updated_data['sellerAddress'], updated_data['sellerOrgNumber'], 1 if updated_data['sellerVatRegistered'] else 0,
+         updated_data['deliveryDetails'], updated_data['vatRate'], updated_data['totalAmount'], updated_data['totalAmountExclVAT'], updated_data['totalVAT'],
+         updated_data['status'], estimate_id)
     )
     cursor.execute('DELETE FROM EstimateLineItems WHERE estimateId = ?', (estimate_id,))
     for item in updated_data['lineItems']:
         cursor.execute(
-            'INSERT INTO EstimateLineItems (estimateId, description, quantity, unitPrice) VALUES (?, ?, ?, ?)',
-            (estimate_id, item['description'], item['quantity'], item['unitPrice'])
+            'INSERT INTO EstimateLineItems (estimateId, description, quantity, unitPrice, amountExclVAT, vatAmount, amountInclVAT) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            (estimate_id, item['description'], item['quantity'], item['unitPrice'], item['amountExclVAT'], item['vatAmount'], item['amountInclVAT'])
         )
     conn.commit()
     conn.close()
@@ -242,32 +299,48 @@ translations = {
         'invoiceNumber': "Invoice #",
         'client': "Client",
         'date': "Date",
+        'dueDate': "Due Date", # Added
         'total': "Total",
         'edit': "Edit",
         'save': "Save",
-        'delete': "Delete",
+        'delete': "Delete", # Renamed for estimates/general, invoices will use 'Cancel'
+        'cancelInvoice': "Cancel Invoice", # New for invoices
         'confirmDeletion': "Confirm Deletion",
+        'confirmCancellation': "Confirm Cancellation", # New for invoices
         'areYouSureDelete': "Are you sure you want to delete {} #{} for {}?",
+        'areYouSureCancel': "Are you sure you want to cancel invoice #{} for {}? This action cannot be undone.", # New for invoices
         'cancel': "Cancel",
         'description': "Description",
         'quantity': "Quantity",
-        'unitPrice': "Unit Price",
-        'amount': "Amount",
+        'unitPrice': "Unit Price (Excl. VAT)", # Updated label
+        'amount': "Amount (Excl. VAT)", # Updated label
+        'vatAmount': "VAT Amount", # New label
+        'amountInclVAT': "Amount (Incl. VAT)", # New label
         'actions': "Actions",
         'remove': "Remove",
         'addLineItem': "Add Line Item",
-        'totalAmount': "Total Amount",
+        'totalAmount': "Total Amount (Incl. VAT)", # Updated label
+        'totalAmountExclVAT': "Total Amount (Excl. VAT)", # New label
+        'totalVAT': "Total VAT", # New label
         'addInvoiceTitle': "Add New Invoice",
         'clientName': "Client Name",
         'clientEmail': "Client Email",
+        'sellerName': "Your Company Name", # New
+        'sellerAddress': "Your Company Address", # New
+        'sellerOrgNumber': "Your Organization Number", # New
+        'sellerVatRegistered': "VAT Registered (append 'VAT' to Org. No.)", # New
+        'deliveryDetails': "Delivery Time and Place", # New
+        'vatRate': "VAT Rate (%)", # New
         'createInvoice': "Create Invoice",
         'databaseNotReady': "Database not ready. Please try again.",
         'invoiceAddedSuccess': "Invoice added successfully!",
         'failedToAddInvoice': "Failed to add invoice:",
         'invoiceUpdatedSuccess': "Invoice updated successfully!",
         'failedToUpdateInvoice': "Failed to update invoice:",
-        'invoiceDeletedSuccess': "Invoice deleted successfully!",
-        'failedToDeleteInvoice': "Failed to delete invoice:",
+        'invoiceDeletedSuccess': "Estimate deleted successfully!", # Changed to estimate
+        'invoiceCancelledSuccess': "Invoice cancelled successfully!", # New for invoices
+        'failedToDeleteInvoice': "Failed to delete estimate:", # Changed to estimate
+        'failedToCancelInvoice': "Failed to cancel invoice:", # New for invoices
         'selectInvoice': "Select an invoice from the list or add a new one to view details.",
         'invoiceDate': "Invoice Date",
         'language': "Language",
@@ -306,16 +379,16 @@ translations = {
         'estimate': "Estimate",
         'generatePdf': "Generate PDF (Print)", # Changed to indicate print functionality
         'generatingPdf': "Preparing for print...",
-        'pdfGeneratedSuccess': "Print preview ready!",
+        'pdfGeneratedSuccess': "Print preview ready! Use your browser's print function (Ctrl+P or Cmd+P) to save this as a PDF.",
         'failedToGeneratePdf': "Failed to prepare print preview:",
         'failedToLoadInvoices': "Failed to load invoices:",
         'failedToLoadEstimates': "Failed to load estimates:",
+        'invoiceComplianceNote': "Note: According to Norwegian regulations, invoice numbers are automatically assigned by the system and cannot be manually set.",
+        'due_date_tip': "Due date is typically 14 or 30 days after invoice date.",
     }
 }
 
 def get_translation(lang, key, *args):
-    # Since only 'en' is supported, we can simplify this.
-    # The 'lang' parameter will effectively always be 'en' from session state.
     text = translations['en'].get(key, key)
     return text.format(*args)
 
@@ -329,33 +402,36 @@ currencies = {
 def format_currency(amount, currency_code):
     currency_info = currencies.get(currency_code, currencies['USD'])
     try:
-        # Using f-string for locale-aware formatting, requires Python 3.6+
-        # For older Python, you'd use string.format or manual concatenation
-        if currency_code == 'NOK': # Norwegian Krone often uses 'kr' after amount
-             return f"{float(amount):,.2f} {currency_info['symbol']}"
+        if currency_code == 'NOK':
+             return f"{float(amount):,.2f} {currency_info['symbol']}".replace(',', ' ').replace('.', ',') # Norwegian format
         return f"{currency_info['symbol']}{float(amount):,.2f}"
     except Exception as e:
         st.error(f"Error formatting currency: {e}")
         return f"{currency_info['symbol']}{float(amount):.2f}"
 
-# --- Streamlit App Components ---
+def calculate_line_item_amounts(quantity, unit_price, vat_rate):
+    amount_excl_vat = float(quantity) * float(unit_price)
+    vat_amount = amount_excl_vat * (float(vat_rate) / 100)
+    amount_incl_vat = amount_excl_vat + vat_amount
+    return amount_excl_vat, vat_amount, amount_incl_vat
 
-def show_message(message, type='success'):
-    if type == 'success':
-        st.success(message)
-    else:
-        st.error(message)
-
-def calculate_total(line_items):
-    total = 0.0
+def calculate_overall_totals(line_items, vat_rate):
+    total_excl_vat = 0.0
+    total_vat = 0.0
+    total_incl_vat = 0.0
     for item in line_items:
         try:
             qty = float(item.get('quantity', 0))
             price = float(item.get('unitPrice', 0))
-            total += qty * price
+            
+            amount_excl_vat, vat_amount, amount_incl_vat = calculate_line_item_amounts(qty, price, vat_rate)
+            
+            total_excl_vat += amount_excl_vat
+            total_vat += vat_amount
+            total_incl_vat += amount_incl_vat
         except ValueError:
-            continue # Handle cases where quantity or unitPrice might be invalid
-    return total
+            continue
+    return total_excl_vat, total_vat, total_incl_vat
 
 def invoice_detail_view(invoice, on_update, on_delete, on_generate_next_invoice, lang, currency):
     st.subheader(get_translation(lang, 'invoiceNumber') + invoice['invoiceNumber'])
@@ -369,9 +445,10 @@ def invoice_detail_view(invoice, on_update, on_delete, on_generate_next_invoice,
             st.session_state.show_add_invoice_modal = True # Re-use modal for editing
             st.rerun()
     with col2:
-        if st.button(get_translation(lang, 'delete'), key=f"delete_invoice_{invoice['id']}"):
-            st.session_state.show_delete_confirm = True
-            st.session_state.item_to_delete = {'id': invoice['id'], 'type': 'invoice', 'number': invoice['invoiceNumber'], 'clientName': invoice['clientName']}
+        # Changed delete to cancel for invoices
+        if st.button(get_translation(lang, 'cancelInvoice'), key=f"cancel_invoice_{invoice['id']}"):
+            st.session_state.show_delete_confirm = True # Re-use confirm modal
+            st.session_state.item_to_delete = {'id': invoice['id'], 'type': 'invoice_cancel', 'number': invoice['invoiceNumber'], 'clientName': invoice['clientName']}
             st.rerun()
     with col3:
         if st.button(get_translation(lang, 'generatePdf'), key=f"print_invoice_{invoice['id']}"):
@@ -383,9 +460,31 @@ def invoice_detail_view(invoice, on_update, on_delete, on_generate_next_invoice,
 
     # Display for printing
     st.markdown(f"### {get_translation(lang, 'invoiceNumber')}{invoice['invoiceNumber']}")
+    if invoice['isCancelled']:
+        st.error("This invoice is CANCELLED.") # Indicate if cancelled
+
     st.write(f"**{get_translation(lang, 'invoiceDate')}:** {invoice['invoiceDate']}")
+    st.write(f"**{get_translation(lang, 'dueDate')}:** {invoice['dueDate']}") # Display due date
+
+    st.markdown("---")
+    st.markdown("#### " + get_translation(lang, 'sellerName'))
+    st.write(f"{invoice['sellerName']}")
+    st.write(f"{invoice['sellerAddress']}")
+    org_num_display = invoice['sellerOrgNumber']
+    if invoice['sellerVatRegistered']:
+        org_num_display += " VAT"
+    st.write(f"Org. No.: {org_num_display}")
+    st.markdown("---")
+
+    st.markdown("#### " + get_translation(lang, 'client'))
     st.write(f"**{get_translation(lang, 'clientName')}:** {invoice['clientName']}")
     st.write(f"**{get_translation(lang, 'clientEmail')}:** {invoice['clientEmail']}")
+    st.markdown("---")
+
+    if invoice['deliveryDetails']:
+        st.markdown("#### " + get_translation(lang, 'deliveryDetails'))
+        st.write(f"{invoice['deliveryDetails']}")
+        st.markdown("---")
 
     st.markdown("#### " + get_translation(lang, 'lineItems'))
     line_item_data = []
@@ -395,10 +494,15 @@ def invoice_detail_view(invoice, on_update, on_delete, on_generate_next_invoice,
             get_translation(lang, 'description'): item['description'],
             get_translation(lang, 'quantity'): item['quantity'],
             get_translation(lang, 'unitPrice'): format_currency(item['unitPrice'], currency),
-            get_translation(lang, 'amount'): format_currency(float(item['quantity']) * float(item['unitPrice']), currency)
+            get_translation(lang, 'amount'): format_currency(item['amountExclVAT'], currency),
+            get_translation(lang, 'vatAmount'): format_currency(item['vatAmount'], currency),
+            get_translation(lang, 'amountInclVAT'): format_currency(item['amountInclVAT'], currency)
         })
     st.table(pd.DataFrame(line_item_data))
-    st.markdown(f"**{get_translation(lang, 'totalAmount')}:** {format_currency(calculate_total(invoice['lineItems']), currency)}")
+    
+    st.markdown(f"**{get_translation(lang, 'totalAmountExclVAT')}:** {format_currency(invoice['totalAmountExclVAT'], currency)}")
+    st.markdown(f"**{get_translation(lang, 'totalVAT')}:** {format_currency(invoice['totalVAT'], currency)}")
+    st.markdown(f"**{get_translation(lang, 'totalAmount')}:** {format_currency(invoice['totalAmount'], currency)}") # This is totalInclVAT
 
     st.markdown("---")
     
@@ -446,6 +550,21 @@ def estimate_detail_view(estimate, on_update, on_delete, on_convert, lang, curre
     st.write(f"**{get_translation(lang, 'clientEmail')}:** {estimate['clientEmail']}")
     st.write(f"**{get_translation(lang, 'status')}:** {get_translation(lang, estimate['status'])}")
 
+    st.markdown("---")
+    st.markdown("#### " + get_translation(lang, 'sellerName'))
+    st.write(f"{estimate['sellerName']}")
+    st.write(f"{estimate['sellerAddress']}")
+    org_num_display = estimate['sellerOrgNumber']
+    if estimate['sellerVatRegistered']:
+        org_num_display += " VAT"
+    st.write(f"Org. No.: {org_num_display}")
+    st.markdown("---")
+
+    if estimate['deliveryDetails']:
+        st.markdown("#### " + get_translation(lang, 'deliveryDetails'))
+        st.write(f"{estimate['deliveryDetails']}")
+        st.markdown("---")
+
     st.markdown("#### " + get_translation(lang, 'lineItems'))
     line_item_data = []
     for i, item in enumerate(estimate['lineItems']):
@@ -454,10 +573,15 @@ def estimate_detail_view(estimate, on_update, on_delete, on_convert, lang, curre
             get_translation(lang, 'description'): item['description'],
             get_translation(lang, 'quantity'): item['quantity'],
             get_translation(lang, 'unitPrice'): format_currency(item['unitPrice'], currency),
-            get_translation(lang, 'amount'): format_currency(float(item['quantity']) * float(item['unitPrice']), currency)
+            get_translation(lang, 'amount'): format_currency(item['amountExclVAT'], currency),
+            get_translation(lang, 'vatAmount'): format_currency(item['vatAmount'], currency),
+            get_translation(lang, 'amountInclVAT'): format_currency(item['amountInclVAT'], currency)
         })
     st.table(pd.DataFrame(line_item_data))
-    st.markdown(f"**{get_translation(lang, 'totalAmount')}:** {format_currency(calculate_total(estimate['lineItems']), currency)}")
+
+    st.markdown(f"**{get_translation(lang, 'totalAmountExclVAT')}:** {format_currency(estimate['totalAmountExclVAT'], currency)}")
+    st.markdown(f"**{get_translation(lang, 'totalVAT')}:** {format_currency(estimate['totalVAT'], currency)}")
+    st.markdown(f"**{get_translation(lang, 'totalAmount')}:** {format_currency(estimate['totalAmount'], currency)}") # This is totalInclVAT
 
     st.markdown("---")
 
@@ -475,9 +599,16 @@ def add_edit_invoice_form(on_add_invoice, on_update_invoice, lang, currency):
     if initial_data_from_session is None:
         initial_data = {
             'invoiceDate': datetime.now().strftime('%Y-%m-%d'),
+            'dueDate': (datetime.now() + timedelta(days=14)).strftime('%Y-%m-%d'), # Default due date
             'clientName': '',
             'clientEmail': '',
-            'lineItems': [{'description': '', 'quantity': 1.0, 'unitPrice': 0.0}],
+            'sellerName': 'Your Company Name', # Default seller info
+            'sellerAddress': 'Your Company Address, City, Postcode',
+            'sellerOrgNumber': '123456789',
+            'sellerVatRegistered': True,
+            'deliveryDetails': '',
+            'vatRate': 25.0, # Default Norwegian VAT rate
+            'lineItems': [{'description': '', 'quantity': 1.0, 'unitPrice': 0.0, 'amountExclVAT': 0.0, 'vatAmount': 0.0, 'amountInclVAT': 0.0}],
             'isRecurring': False,
             'recurrenceFrequency': 'monthly',
             'nextInvoiceDate': datetime.now().strftime('%Y-%m-%d'),
@@ -489,7 +620,7 @@ def add_edit_invoice_form(on_add_invoice, on_update_invoice, lang, currency):
     # Initialize form_line_items in session state if not present or if switching invoices in edit mode
     if 'form_line_items' not in st.session_state or \
        (is_editing and st.session_state.editing_invoice_id != st.session_state.get('last_edited_invoice_id_for_form')):
-        st.session_state.form_line_items = initial_data.get('lineItems', [{'description': '', 'quantity': 1.0, 'unitPrice': 0.0}])
+        st.session_state.form_line_items = initial_data.get('lineItems', [{'description': '', 'quantity': 1.0, 'unitPrice': 0.0, 'amountExclVAT': 0.0, 'vatAmount': 0.0, 'amountInclVAT': 0.0}])
         st.session_state.last_edited_invoice_id_for_form = st.session_state.editing_invoice_id
 
     # Safely determine initial date values for st.date_input
@@ -497,6 +628,13 @@ def add_edit_invoice_form(on_add_invoice, on_update_invoice, lang, currency):
     if initial_data.get('invoiceDate'):
         try:
             invoice_date_val = datetime.strptime(initial_data['invoiceDate'], '%Y-%m-%d').date()
+        except ValueError:
+            pass
+    
+    due_date_val = (datetime.now() + timedelta(days=14)).date()
+    if initial_data.get('dueDate'):
+        try:
+            due_date_val = datetime.strptime(initial_data['dueDate'], '%Y-%m-%d').date()
         except ValueError:
             pass
 
@@ -516,9 +654,24 @@ def add_edit_invoice_form(on_add_invoice, on_update_invoice, lang, currency):
 
     # --- Main Form for Invoice Details ---
     with st.form(key='invoice_form'):
+        st.subheader("Invoice Details")
+        st.info(get_translation(lang, 'invoiceComplianceNote'))
+        invoice_date = st.date_input(get_translation(lang, 'invoiceDate'), value=invoice_date_val)
+        due_date = st.date_input(get_translation(lang, 'dueDate'), value=due_date_val, help=get_translation(lang, 'due_date_tip'))
+
+        st.subheader("Client Information")
         client_name = st.text_input(get_translation(lang, 'clientName'), value=initial_data['clientName'])
         client_email = st.text_input(get_translation(lang, 'clientEmail'), value=initial_data['clientEmail'])
-        invoice_date = st.date_input(get_translation(lang, 'invoiceDate'), value=invoice_date_val)
+
+        st.subheader("Your Company Information (Seller)")
+        seller_name = st.text_input(get_translation(lang, 'sellerName'), value=initial_data['sellerName'])
+        seller_address = st.text_area(get_translation(lang, 'sellerAddress'), value=initial_data['sellerAddress'])
+        seller_org_number = st.text_input(get_translation(lang, 'sellerOrgNumber'), value=initial_data['sellerOrgNumber'])
+        seller_vat_registered = st.checkbox(get_translation(lang, 'sellerVatRegistered'), value=initial_data['sellerVatRegistered'])
+        
+        st.subheader("Other Details")
+        delivery_details = st.text_area(get_translation(lang, 'deliveryDetails'), value=initial_data['deliveryDetails'])
+        vat_rate = st.number_input(get_translation(lang, 'vatRate'), min_value=0.0, max_value=100.0, value=float(initial_data['vatRate']), format="%.2f")
 
         is_recurring = st.checkbox(get_translation(lang, 'recurringInvoice'), value=initial_data['isRecurring'])
         recurrence_frequency = initial_data['recurrenceFrequency']
@@ -532,16 +685,41 @@ def add_edit_invoice_form(on_add_invoice, on_update_invoice, lang, currency):
 
         submitted = st.form_submit_button(get_translation(lang, 'createInvoice') if not is_editing else get_translation(lang, 'save'))
         if submitted:
+            # Recalculate line item amounts and totals with current VAT rate
+            processed_line_items = []
+            for item in st.session_state.form_line_items:
+                excl_vat, vat_amt, incl_vat = calculate_line_item_amounts(item['quantity'], item['unitPrice'], vat_rate)
+                processed_line_items.append({
+                    'description': item['description'],
+                    'quantity': item['quantity'],
+                    'unitPrice': item['unitPrice'],
+                    'amountExclVAT': excl_vat,
+                    'vatAmount': vat_amt,
+                    'amountInclVAT': incl_vat
+                })
+            
+            total_excl_vat, total_vat, total_incl_vat = calculate_overall_totals(processed_line_items, vat_rate)
+
             invoice_data = {
                 'invoiceDate': invoice_date.strftime('%Y-%m-%d'),
+                'dueDate': due_date.strftime('%Y-%m-%d'),
                 'clientName': client_name,
                 'clientEmail': client_email,
-                'lineItems': st.session_state.form_line_items, # Get the latest from session state
-                'totalAmount': calculate_total(st.session_state.form_line_items),
+                'sellerName': seller_name,
+                'sellerAddress': seller_address,
+                'sellerOrgNumber': seller_org_number,
+                'sellerVatRegistered': seller_vat_registered,
+                'deliveryDetails': delivery_details,
+                'vatRate': vat_rate,
+                'lineItems': processed_line_items,
+                'totalAmount': total_incl_vat, # Store total including VAT
+                'totalAmountExclVAT': total_excl_vat,
+                'totalVAT': total_vat,
                 'isRecurring': is_recurring,
                 'recurrenceFrequency': recurrence_frequency,
                 'nextInvoiceDate': next_invoice_date.strftime('%Y-%m-%d') if next_invoice_date else None,
                 'endDate': end_date.strftime('%Y-%m-%d') if end_date else None,
+                'isCancelled': initial_data.get('isCancelled', False) # Preserve cancelled status on update
             }
             if is_editing:
                 on_update_invoice(st.session_state.editing_invoice_id, invoice_data)
@@ -552,7 +730,7 @@ def add_edit_invoice_form(on_add_invoice, on_update_invoice, lang, currency):
             st.session_state.show_add_invoice_modal = False
             st.session_state.editing_invoice_id = None
             st.session_state.edited_invoice_data = None
-            st.session_state.form_line_items = [{'description': '', 'quantity': 1.0, 'unitPrice': 0.0}] # Reset form line items
+            st.session_state.form_line_items = [{'description': '', 'quantity': 1.0, 'unitPrice': 0.0, 'amountExclVAT': 0.0, 'vatAmount': 0.0, 'amountInclVAT': 0.0}] # Reset form line items
             st.session_state.last_edited_invoice_id_for_form = None # Clear this flag
             st.rerun()
 
@@ -561,17 +739,32 @@ def add_edit_invoice_form(on_add_invoice, on_update_invoice, lang, currency):
     st.subheader(get_translation(lang, 'lineItems'))
     
     # Display and allow editing of existing line items
+    # Need to update line item amounts dynamically as quantity/price/vat_rate changes
+    current_vat_rate_for_display = vat_rate # Use the VAT rate from the form for live calculation
+    
     for i, item in enumerate(st.session_state.form_line_items):
         st.markdown(f"**{get_translation(lang, 'lineItems')} {i+1}**")
-        col_desc, col_qty, col_price, col_amt, col_remove = st.columns([3, 1, 1, 1, 0.5])
+        col_desc, col_qty, col_price, col_amt_excl, col_vat_amt, col_amt_incl, col_remove = st.columns([3, 1, 1, 1, 1, 1, 0.5])
         with col_desc:
             st.session_state.form_line_items[i]['description'] = st.text_input(get_translation(lang, 'description'), value=item['description'], key=f"desc_{i}_{is_editing}_outside")
         with col_qty:
             st.session_state.form_line_items[i]['quantity'] = st.number_input(get_translation(lang, 'quantity'), min_value=0.0, value=float(item['quantity']), key=f"qty_{i}_{is_editing}_outside")
         with col_price:
             st.session_state.form_line_items[i]['unitPrice'] = st.number_input(get_translation(lang, 'unitPrice'), min_value=0.0, value=float(item['unitPrice']), format="%.2f", key=f"price_{i}_{is_editing}_outside")
-        with col_amt:
-            st.text_input(get_translation(lang, 'amount'), value=format_currency(float(item['quantity']) * float(item['unitPrice']), currency), disabled=True, key=f"amt_{i}_{is_editing}_outside")
+        
+        # Calculate and display amounts dynamically
+        excl_vat, vat_amt, incl_vat = calculate_line_item_amounts(st.session_state.form_line_items[i]['quantity'], st.session_state.form_line_items[i]['unitPrice'], current_vat_rate_for_display)
+        st.session_state.form_line_items[i]['amountExclVAT'] = excl_vat
+        st.session_state.form_line_items[i]['vatAmount'] = vat_amt
+        st.session_state.form_line_items[i]['amountInclVAT'] = incl_vat
+
+        with col_amt_excl:
+            st.text_input(get_translation(lang, 'amount'), value=format_currency(excl_vat, currency), disabled=True, key=f"amt_excl_{i}_{is_editing}_outside")
+        with col_vat_amt:
+            st.text_input(get_translation(lang, 'vatAmount'), value=format_currency(vat_amt, currency), disabled=True, key=f"vat_amt_{i}_{is_editing}_outside")
+        with col_amt_incl:
+            st.text_input(get_translation(lang, 'amountInclVAT'), value=format_currency(incl_vat, currency), disabled=True, key=f"amt_incl_{i}_{is_editing}_outside")
+
         with col_remove:
             st.markdown("<br>", unsafe_allow_html=True) # Spacer
             if st.button(get_translation(lang, 'remove'), key=f"remove_{i}_{is_editing}_outside"):
@@ -579,17 +772,21 @@ def add_edit_invoice_form(on_add_invoice, on_update_invoice, lang, currency):
                 st.rerun() # Rerun to update the list
 
     if st.button(get_translation(lang, 'addLineItem'), key=f"add_line_item_{is_editing}_outside"):
-        st.session_state.form_line_items.append({'description': '', 'quantity': 1.0, 'unitPrice': 0.0})
+        st.session_state.form_line_items.append({'description': '', 'quantity': 1.0, 'unitPrice': 0.0, 'amountExclVAT': 0.0, 'vatAmount': 0.0, 'amountInclVAT': 0.0})
         st.rerun() # Rerun to show new line item
 
-    st.markdown(f"**{get_translation(lang, 'totalAmount')}:** {format_currency(calculate_total(st.session_state.form_line_items), currency)}")
+    # Display live totals based on current form data
+    current_total_excl_vat, current_total_vat, current_total_incl_vat = calculate_overall_totals(st.session_state.form_line_items, current_vat_rate_for_display)
+    st.markdown(f"**{get_translation(lang, 'totalAmountExclVAT')}:** {format_currency(current_total_excl_vat, currency)}")
+    st.markdown(f"**{get_translation(lang, 'totalVAT')}:** {format_currency(current_total_vat, currency)}")
+    st.markdown(f"**{get_translation(lang, 'totalAmount')}:** {format_currency(current_total_incl_vat, currency)}")
     st.markdown("---")
 
     if st.button(get_translation(lang, 'cancel'), key=f"cancel_invoice_form_{is_editing}"):
         st.session_state.show_add_invoice_modal = False
         st.session_state.editing_invoice_id = None
         st.session_state.edited_invoice_data = None
-        st.session_state.form_line_items = [{'description': '', 'quantity': 1.0, 'unitPrice': 0.0}] # Reset form line items
+        st.session_state.form_line_items = [{'description': '', 'quantity': 1.0, 'unitPrice': 0.0, 'amountExclVAT': 0.0, 'vatAmount': 0.0, 'amountInclVAT': 0.0}] # Reset form line items
         st.session_state.last_edited_invoice_id_for_form = None # Clear this flag
         st.rerun()
 
@@ -606,7 +803,13 @@ def add_edit_estimate_form(on_add_estimate, on_update_estimate, lang, currency):
             'estimateDate': datetime.now().strftime('%Y-%m-%d'),
             'clientName': '',
             'clientEmail': '',
-            'lineItems': [{'description': '', 'quantity': 1.0, 'unitPrice': 0.0}],
+            'sellerName': 'Your Company Name', # Default seller info
+            'sellerAddress': 'Your Company Address, City, Postcode',
+            'sellerOrgNumber': '123456789',
+            'sellerVatRegistered': True,
+            'deliveryDetails': '',
+            'vatRate': 25.0, # Default Norwegian VAT rate
+            'lineItems': [{'description': '', 'quantity': 1.0, 'unitPrice': 0.0, 'amountExclVAT': 0.0, 'vatAmount': 0.0, 'amountInclVAT': 0.0}],
             'status': 'draft'
         }
     else:
@@ -615,7 +818,7 @@ def add_edit_estimate_form(on_add_estimate, on_update_estimate, lang, currency):
     # Initialize form_estimate_line_items in session state if not present or if switching estimates in edit mode
     if 'form_estimate_line_items' not in st.session_state or \
        (is_editing and st.session_state.editing_estimate_id != st.session_state.get('last_edited_estimate_id_for_form')):
-        st.session_state.form_estimate_line_items = initial_data.get('lineItems', [{'description': '', 'quantity': 1.0, 'unitPrice': 0.0}])
+        st.session_state.form_estimate_line_items = initial_data.get('lineItems', [{'description': '', 'quantity': 1.0, 'unitPrice': 0.0, 'amountExclVAT': 0.0, 'vatAmount': 0.0, 'amountInclVAT': 0.0}])
         st.session_state.last_edited_estimate_id_for_form = st.session_state.editing_estimate_id
 
     # Safely determine initial date value for st.date_input
@@ -628,19 +831,55 @@ def add_edit_estimate_form(on_add_estimate, on_update_estimate, lang, currency):
 
     # --- Main Form for Estimate Details ---
     with st.form(key='estimate_form'):
-        client_name = st.text_input(get_translation(lang, 'clientName'), value=initial_data['clientName'])
-        client_email = st.text_input(get_translation(lang, 'clientEmail'), value=initial_data['clientEmail'])
+        st.subheader("Estimate Details")
         estimate_date = st.date_input(get_translation(lang, 'date'), value=estimate_date_val)
         status = st.selectbox(get_translation(lang, 'status'), ['draft', 'sent', 'accepted', 'rejected'], index=['draft', 'sent', 'accepted', 'rejected'].index(initial_data['status']))
 
+        st.subheader("Client Information")
+        client_name = st.text_input(get_translation(lang, 'clientName'), value=initial_data['clientName'])
+        client_email = st.text_input(get_translation(lang, 'clientEmail'), value=initial_data['clientEmail'])
+
+        st.subheader("Your Company Information (Seller)")
+        seller_name = st.text_input(get_translation(lang, 'sellerName'), value=initial_data['sellerName'], key="est_seller_name")
+        seller_address = st.text_area(get_translation(lang, 'sellerAddress'), value=initial_data['sellerAddress'], key="est_seller_address")
+        seller_org_number = st.text_input(get_translation(lang, 'sellerOrgNumber'), value=initial_data['sellerOrgNumber'], key="est_seller_org_number")
+        seller_vat_registered = st.checkbox(get_translation(lang, 'sellerVatRegistered'), value=initial_data['sellerVatRegistered'], key="est_seller_vat_registered")
+        
+        st.subheader("Other Details")
+        delivery_details = st.text_area(get_translation(lang, 'deliveryDetails'), value=initial_data['deliveryDetails'], key="est_delivery_details")
+        vat_rate = st.number_input(get_translation(lang, 'vatRate'), min_value=0.0, max_value=100.0, value=float(initial_data['vatRate']), format="%.2f", key="est_vat_rate")
+
         submitted = st.form_submit_button(get_translation(lang, 'createEstimate') if not is_editing else get_translation(lang, 'save'))
         if submitted:
+            # Recalculate line item amounts and totals with current VAT rate
+            processed_line_items = []
+            for item in st.session_state.form_estimate_line_items:
+                excl_vat, vat_amt, incl_vat = calculate_line_item_amounts(item['quantity'], item['unitPrice'], vat_rate)
+                processed_line_items.append({
+                    'description': item['description'],
+                    'quantity': item['quantity'],
+                    'unitPrice': item['unitPrice'],
+                    'amountExclVAT': excl_vat,
+                    'vatAmount': vat_amt,
+                    'amountInclVAT': incl_vat
+                })
+            
+            total_excl_vat, total_vat, total_incl_vat = calculate_overall_totals(processed_line_items, vat_rate)
+
             estimate_data = {
                 'estimateDate': estimate_date.strftime('%Y-%m-%d'),
                 'clientName': client_name,
                 'clientEmail': client_email,
-                'lineItems': st.session_state.form_estimate_line_items, # Get the latest from session state
-                'totalAmount': calculate_total(st.session_state.form_estimate_line_items),
+                'sellerName': seller_name,
+                'sellerAddress': seller_address,
+                'sellerOrgNumber': seller_org_number,
+                'sellerVatRegistered': seller_vat_registered,
+                'deliveryDetails': delivery_details,
+                'vatRate': vat_rate,
+                'lineItems': processed_line_items,
+                'totalAmount': total_incl_vat, # Store total including VAT
+                'totalAmountExclVAT': total_excl_vat,
+                'totalVAT': total_vat,
                 'status': status
             }
             if is_editing:
@@ -651,7 +890,7 @@ def add_edit_estimate_form(on_add_estimate, on_update_estimate, lang, currency):
             st.session_state.show_add_estimate_modal = False
             st.session_state.editing_estimate_id = None
             st.session_state.edited_estimate_data = None
-            st.session_state.form_estimate_line_items = [{'description': '', 'quantity': 1.0, 'unitPrice': 0.0}]
+            st.session_state.form_estimate_line_items = [{'description': '', 'quantity': 1.0, 'unitPrice': 0.0, 'amountExclVAT': 0.0, 'vatAmount': 0.0, 'amountInclVAT': 0.0}]
             st.session_state.last_edited_estimate_id_for_form = None
             st.rerun()
 
@@ -659,18 +898,33 @@ def add_edit_estimate_form(on_add_estimate, on_update_estimate, lang, currency):
     st.markdown("---")
     st.subheader(get_translation(lang, 'lineItems'))
 
+    # Need to update line item amounts dynamically as quantity/price/vat_rate changes
+    current_vat_rate_for_display = vat_rate # Use the VAT rate from the form for live calculation
+
     new_line_items = []
     for i, item in enumerate(st.session_state.form_estimate_line_items):
         st.markdown(f"**{get_translation(lang, 'lineItems')} {i+1}**")
-        col_desc, col_qty, col_price, col_amt, col_remove = st.columns([3, 1, 1, 1, 0.5])
+        col_desc, col_qty, col_price, col_amt_excl, col_vat_amt, col_amt_incl, col_remove = st.columns([3, 1, 1, 1, 1, 1, 0.5])
         with col_desc:
             st.session_state.form_estimate_line_items[i]['description'] = st.text_input(get_translation(lang, 'description'), value=item['description'], key=f"est_desc_{i}_{is_editing}_outside")
         with col_qty:
             st.session_state.form_estimate_line_items[i]['quantity'] = st.number_input(get_translation(lang, 'quantity'), min_value=0.0, value=float(item['quantity']), key=f"est_qty_{i}_{is_editing}_outside")
         with col_price:
             st.session_state.form_estimate_line_items[i]['unitPrice'] = st.number_input(get_translation(lang, 'unitPrice'), min_value=0.0, value=float(item['unitPrice']), format="%.2f", key=f"est_price_{i}_{is_editing}_outside")
-        with col_amt:
-            st.text_input(get_translation(lang, 'amount'), value=format_currency(float(item['quantity']) * float(item['unitPrice']), currency), disabled=True, key=f"est_amt_{i}_{is_editing}_outside")
+        
+        # Calculate and display amounts dynamically
+        excl_vat, vat_amt, incl_vat = calculate_line_item_amounts(st.session_state.form_estimate_line_items[i]['quantity'], st.session_state.form_estimate_line_items[i]['unitPrice'], current_vat_rate_for_display)
+        st.session_state.form_estimate_line_items[i]['amountExclVAT'] = excl_vat
+        st.session_state.form_estimate_line_items[i]['vatAmount'] = vat_amt
+        st.session_state.form_estimate_line_items[i]['amountInclVAT'] = incl_vat
+
+        with col_amt_excl:
+            st.text_input(get_translation(lang, 'amount'), value=format_currency(excl_vat, currency), disabled=True, key=f"est_amt_excl_{i}_{is_editing}_outside")
+        with col_vat_amt:
+            st.text_input(get_translation(lang, 'vatAmount'), value=format_currency(vat_amt, currency), disabled=True, key=f"est_vat_amt_{i}_{is_editing}_outside")
+        with col_amt_incl:
+            st.text_input(get_translation(lang, 'amountInclVAT'), value=format_currency(incl_vat, currency), disabled=True, key=f"est_amt_incl_{i}_{is_editing}_outside")
+
         with col_remove:
             st.markdown("<br>", unsafe_allow_html=True) # Spacer
             if st.button(get_translation(lang, 'remove'), key=f"est_remove_{i}_{is_editing}_outside"):
@@ -680,17 +934,20 @@ def add_edit_estimate_form(on_add_estimate, on_update_estimate, lang, currency):
     st.session_state.form_estimate_line_items = new_line_items
 
     if st.button(get_translation(lang, 'addLineItem'), key=f"est_add_line_item_{is_editing}_outside"):
-        st.session_state.form_estimate_line_items.append({'description': '', 'quantity': 1.0, 'unitPrice': 0.0})
+        st.session_state.form_estimate_line_items.append({'description': '', 'quantity': 1.0, 'unitPrice': 0.0, 'amountExclVAT': 0.0, 'vatAmount': 0.0, 'amountInclVAT': 0.0})
         st.rerun()
 
-    st.markdown(f"**{get_translation(lang, 'totalAmount')}:** {format_currency(calculate_total(st.session_state.form_estimate_line_items), currency)}")
+    current_total_excl_vat, current_total_vat, current_total_incl_vat = calculate_overall_totals(st.session_state.form_estimate_line_items, current_vat_rate_for_display)
+    st.markdown(f"**{get_translation(lang, 'totalAmountExclVAT')}:** {format_currency(current_total_excl_vat, currency)}")
+    st.markdown(f"**{get_translation(lang, 'totalVAT')}:** {format_currency(current_total_vat, currency)}")
+    st.markdown(f"**{get_translation(lang, 'totalAmount')}:** {format_currency(current_total_incl_vat, currency)}")
     st.markdown("---")
 
     if st.button(get_translation(lang, 'cancel'), key=f"cancel_estimate_form_{is_editing}"):
         st.session_state.show_add_estimate_modal = False
         st.session_state.editing_estimate_id = None
         st.session_state.edited_estimate_data = None
-        st.session_state.form_estimate_line_items = [{'description': '', 'quantity': 1.0, 'unitPrice': 0.0}]
+        st.session_state.form_estimate_line_items = [{'description': '', 'quantity': 1.0, 'unitPrice': 0.0, 'amountExclVAT': 0.0, 'vatAmount': 0.0, 'amountInclVAT': 0.0}]
         st.session_state.last_edited_estimate_id_for_form = None
         st.rerun()
 
@@ -700,7 +957,6 @@ def main():
     # Initialize session state variables
     if 'current_view' not in st.session_state:
         st.session_state.current_view = 'invoices'
-    # Default language to 'en' and remove language selection UI
     st.session_state.language = 'en' 
     if 'currency' not in st.session_state:
         st.session_state.currency = 'USD'
@@ -733,8 +989,7 @@ def main():
 
     st.title(get_translation(st.session_state.language, 'appName'))
 
-    # Removed language selection column, keeping only currency
-    col_currency = st.columns(1)[0] # Use a single column for currency
+    col_currency = st.columns(1)[0]
     with col_currency:
         selected_currency = st.selectbox(get_translation(st.session_state.language, 'currency'), ['USD', 'EUR', 'NOK'])
         if selected_currency != st.session_state.currency:
@@ -749,7 +1004,6 @@ def main():
             st.success(st.session_state.message)
         else:
             st.error(st.session_state.message)
-        # Clear message after display
         st.session_state.message = ''
         st.session_state.message_type = ''
 
@@ -758,21 +1012,21 @@ def main():
     with col_invoices:
         if st.button(get_translation(st.session_state.language, 'yourInvoices'), use_container_width=True):
             st.session_state.current_view = 'invoices'
-            st.session_state.selected_invoice = None # Clear selection on view change
+            st.session_state.selected_invoice = None
             st.session_state.show_add_invoice_modal = False
             st.session_state.editing_invoice_id = None
             st.session_state.edited_invoice_data = None
-            st.session_state.form_line_items = [{'description': '', 'quantity': 1.0, 'unitPrice': 0.0}] # Reset form line items
+            st.session_state.form_line_items = [{'description': '', 'quantity': 1.0, 'unitPrice': 0.0, 'amountExclVAT': 0.0, 'vatAmount': 0.0, 'amountInclVAT': 0.0}]
             st.session_state.last_edited_invoice_id_for_form = None
             st.rerun()
     with col_estimates:
         if st.button(get_translation(st.session_state.language, 'estimates'), use_container_width=True):
             st.session_state.current_view = 'estimates'
-            st.session_state.selected_estimate = None # Clear selection on view change
+            st.session_state.selected_estimate = None
             st.session_state.show_add_estimate_modal = False
             st.session_state.editing_estimate_id = None
             st.session_state.edited_estimate_data = None
-            st.session_state.form_estimate_line_items = [{'description': '', 'quantity': 1.0, 'unitPrice': 0.0}]
+            st.session_state.form_estimate_line_items = [{'description': '', 'quantity': 1.0, 'unitPrice': 0.0, 'amountExclVAT': 0.0, 'vatAmount': 0.0, 'amountInclVAT': 0.0}]
             st.session_state.last_edited_estimate_id_for_form = None
             st.rerun()
 
@@ -787,9 +1041,9 @@ def main():
             st.subheader(get_translation(st.session_state.language, 'yourInvoices'))
             if st.button(get_translation(st.session_state.language, 'addNewInvoice'), use_container_width=True, key="add_new_invoice_btn"):
                 st.session_state.show_add_invoice_modal = True
-                st.session_state.editing_invoice_id = None # Ensure not in edit mode when adding
+                st.session_state.editing_invoice_id = None
                 st.session_state.edited_invoice_data = None
-                st.session_state.form_line_items = [{'description': '', 'quantity': 1.0, 'unitPrice': 0.0}] # Reset form line items
+                st.session_state.form_line_items = [{'description': '', 'quantity': 1.0, 'unitPrice': 0.0, 'amountExclVAT': 0.0, 'vatAmount': 0.0, 'amountInclVAT': 0.0}]
                 st.session_state.last_edited_invoice_id_for_form = None
                 st.rerun()
 
@@ -798,18 +1052,18 @@ def main():
             else:
                 for inv in invoices:
                     is_selected = st.session_state.selected_invoice and st.session_state.selected_invoice['id'] == inv['id']
-                    if st.button(f"{get_translation(st.session_state.language, 'invoiceNumber')}{inv['invoiceNumber']} - {inv['clientName']} ({format_currency(inv['totalAmount'], st.session_state.currency)})", key=f"select_invoice_{inv['id']}", use_container_width=True):
+                    if st.button(f"{get_translation(st.session_state.language, 'invoiceNumber')}{inv['invoiceNumber']} - {inv['clientName']} ({format_currency(inv['totalAmount'], st.session_state.currency)}) {'(CANCELLED)' if inv['isCancelled'] else ''}", key=f"select_invoice_{inv['id']}", use_container_width=True):
                         st.session_state.selected_invoice = inv
-                        st.session_state.show_print_preview = False # Hide print preview when selecting new invoice
+                        st.session_state.show_print_preview = False
                         st.rerun()
                     if is_selected:
-                        st.markdown("---") # Separator for selected item
+                        st.markdown("---")
 
         with col_detail:
             if st.session_state.selected_invoice:
                 invoice_detail_view(
                     st.session_state.selected_invoice,
-                    on_update=lambda inv_id, data: (update_invoice(inv_id, data), setattr(st.session_state, 'message', get_translation(st.session_state.language, 'invoiceUpdatedSuccess')), setattr(st.session_state, 'message_type', 'success'), st.rerun()),
+                    on_update=lambda inv_id, data: (update_invoice_wrapper(inv_id, data, st.session_state.language), st.rerun()),
                     on_delete=lambda item: (setattr(st.session_state, 'show_delete_confirm', True), setattr(st.session_state, 'item_to_delete', item), st.rerun()),
                     on_generate_next_invoice=lambda original_inv: generate_next_invoice(original_inv, st.session_state.language, st.session_state.currency),
                     lang=st.session_state.language,
@@ -828,7 +1082,7 @@ def main():
                 st.session_state.show_add_estimate_modal = True
                 st.session_state.editing_estimate_id = None
                 st.session_state.edited_estimate_data = None
-                st.session_state.form_estimate_line_items = [{'description': '', 'quantity': 1.0, 'unitPrice': 0.0}]
+                st.session_state.form_estimate_line_items = [{'description': '', 'quantity': 1.0, 'unitPrice': 0.0, 'amountExclVAT': 0.0, 'vatAmount': 0.0, 'amountInclVAT': 0.0}]
                 st.session_state.last_edited_estimate_id_for_form = None
                 st.rerun()
 
@@ -839,16 +1093,16 @@ def main():
                     is_selected = st.session_state.selected_estimate and st.session_state.selected_estimate['id'] == est['id']
                     if st.button(f"{get_translation(st.session_state.language, 'estimateNumber')}{est['estimateNumber']} - {est['clientName']} ({format_currency(est['totalAmount'], st.session_state.currency)})", key=f"select_estimate_{est['id']}", use_container_width=True):
                         st.session_state.selected_estimate = est
-                        st.session_state.show_print_preview = False # Hide print preview when selecting new estimate
+                        st.session_state.show_print_preview = False
                         st.rerun()
                     if is_selected:
-                        st.markdown("---") # Separator for selected item
+                        st.markdown("---")
 
         with col_detail:
             if st.session_state.selected_estimate:
                 estimate_detail_view(
                     st.session_state.selected_estimate,
-                    on_update=lambda est_id, data: (update_estimate(est_id, data), setattr(st.session_state, 'message', get_translation(st.session_state.language, 'estimateUpdatedSuccess')), setattr(st.session_state, 'message_type', 'success'), st.rerun()),
+                    on_update=lambda est_id, data: (update_estimate_wrapper(est_id, data, st.session_state.language), st.rerun()),
                     on_delete=lambda item: (setattr(st.session_state, 'show_delete_confirm', True), setattr(st.session_state, 'item_to_delete', item), st.rerun()),
                     on_convert=lambda estimate: convert_estimate_to_invoice(estimate, st.session_state.language, st.session_state.currency),
                     lang=st.session_state.language,
@@ -878,28 +1132,40 @@ def main():
 
     if st.session_state.show_delete_confirm:
         item = st.session_state.item_to_delete
-        st.warning(get_translation(st.session_state.language, 'areYouSureDelete', get_translation(st.session_state.language, item['type']), item['number'], item['clientName']))
-        col_confirm, col_cancel = st.columns(2)
-        with col_confirm:
-            if st.button(get_translation(st.session_state.language, 'delete'), key="confirm_delete_btn"):
-                if item['type'] == 'invoice':
-                    delete_invoice(item['id'])
-                    st.session_state.selected_invoice = None # Deselect deleted item
-                    st.session_state.message = get_translation(st.session_state.language, 'invoiceDeletedSuccess')
+        if item['type'] == 'invoice_cancel':
+            st.warning(get_translation(st.session_state.language, 'areYouSureCancel', item['number'], item['clientName']))
+            col_confirm, col_cancel = st.columns(2)
+            with col_confirm:
+                if st.button(get_translation(st.session_state.language, 'cancelInvoice'), key="confirm_cancel_btn"):
+                    cancel_invoice(item['id'])
+                    st.session_state.selected_invoice = None
+                    st.session_state.message = get_translation(st.session_state.language, 'invoiceCancelledSuccess')
                     st.session_state.message_type = 'success'
-                else:
+                    st.session_state.show_delete_confirm = False
+                    st.session_state.item_to_delete = None
+                    st.rerun()
+            with col_cancel:
+                if st.button(get_translation(st.session_state.language, 'cancel'), key="cancel_cancel_btn"):
+                    st.session_state.show_delete_confirm = False
+                    st.session_state.item_to_delete = None
+                    st.rerun()
+        else: # For estimates, retain original delete behavior
+            st.warning(get_translation(st.session_state.language, 'areYouSureDelete', get_translation(st.session_state.language, item['type']), item['number'], item['clientName']))
+            col_confirm, col_cancel = st.columns(2)
+            with col_confirm:
+                if st.button(get_translation(st.session_state.language, 'delete'), key="confirm_delete_btn"):
                     delete_estimate(item['id'])
-                    st.session_state.selected_estimate = None # Deselect deleted item
+                    st.session_state.selected_estimate = None
                     st.session_state.message = get_translation(st.session_state.language, 'estimateDeletedSuccess')
                     st.session_state.message_type = 'success'
-                st.session_state.show_delete_confirm = False
-                st.session_state.item_to_delete = None
-                st.rerun()
-        with col_cancel:
-            if st.button(get_translation(st.session_state.language, 'cancel'), key="cancel_delete_btn"):
-                st.session_state.show_delete_confirm = False
-                st.session_state.item_to_delete = None
-                st.rerun()
+                    st.session_state.show_delete_confirm = False
+                    st.session_state.item_to_delete = None
+                    st.rerun()
+            with col_cancel:
+                if st.button(get_translation(st.session_state.language, 'cancel'), key="cancel_delete_btn"):
+                    st.session_state.show_delete_confirm = False
+                    st.session_state.item_to_delete = None
+                    st.rerun()
 
     if st.session_state.show_print_preview:
         item_to_print = st.session_state.print_item['data']
@@ -910,21 +1176,56 @@ def main():
         st.sidebar.button(get_translation(st.session_state.language, 'cancel'), key="cancel_print_preview", on_click=lambda: setattr(st.session_state, 'show_print_preview', False))
 
         st.markdown("---")
-        st.markdown("<style>@media print { body { visibility: hidden; } .printable-area { visibility: visible; position: absolute; top: 0; left: 0; width: 100%; } }</style>", unsafe_allow_html=True)
+        # CSS for print preview
+        st.markdown("""
+        <style>
+            @media print {
+                body { visibility: hidden; }
+                .printable-area { visibility: visible; position: absolute; top: 0; left: 0; width: 100%; font-family: sans-serif; }
+                .stApp { display: none; } /* Hide Streamlit UI during print */
+                h1, h2, h3, h4, h5, h6 { color: #333; }
+                table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+                th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+                th { background-color: #f2f2f2; }
+                .total-section { text-align: right; margin-top: 20px; }
+                .total-section p { margin: 5px 0; font-size: 1.1em; }
+                .total-section strong { font-size: 1.2em; }
+            }
+        </style>
+        """, unsafe_allow_html=True)
         
         st.markdown('<div class="printable-area">', unsafe_allow_html=True)
         st.markdown(f"<h1 style='text-align: center;'>{get_translation(st.session_state.language, item_type).upper()} #{item_to_print[f'{item_type}Number']}</h1>", unsafe_allow_html=True)
         
-        st.write(f"**{get_translation(st.session_state.language, 'date')}:** {item_to_print[f'{item_type}Date']}")
-        # Corrected: Use st.session_state.language for get_translation calls
-        st.write(f"**{get_translation(st.session_state.language, 'clientName')}:** {item_to_print['clientName']}")
-        st.write(f"**{get_translation(st.session_state.language, 'clientEmail')}:** {item_to_print['clientEmail']}")
+        if item_type == 'invoice' and item_to_print['isCancelled']:
+            st.markdown("<h2 style='text-align: center; color: red;'>CANCELLED</h2>", unsafe_allow_html=True)
+
+        st.markdown("<h3>Seller Information:</h3>", unsafe_allow_html=True)
+        st.write(f"<strong>{item_to_print['sellerName']}</strong>", unsafe_allow_html=True)
+        st.write(f"{item_to_print['sellerAddress']}", unsafe_allow_html=True)
+        org_num_display_print = item_to_print['sellerOrgNumber']
+        if item_to_print['sellerVatRegistered']:
+            org_num_display_print += " VAT"
+        st.write(f"Org. No.: {org_num_display_print}", unsafe_allow_html=True)
+        st.markdown("<hr>", unsafe_allow_html=True)
+
+        st.markdown("<h3>Client Information:</h3>", unsafe_allow_html=True)
+        st.write(f"<strong>{get_translation(st.session_state.language, 'clientName')}:</strong> {item_to_print['clientName']}", unsafe_allow_html=True)
+        st.write(f"<strong>{get_translation(st.session_state.language, 'clientEmail')}:</strong> {item_to_print['clientEmail']}", unsafe_allow_html=True)
+        st.markdown("<hr>", unsafe_allow_html=True)
+
+        st.write(f"<strong>{get_translation(st.session_state.language, 'date')}:</strong> {item_to_print[f'{item_type}Date']}", unsafe_allow_html=True)
+        if item_type == 'invoice':
+            st.write(f"<strong>{get_translation(st.session_state.language, 'dueDate')}:</strong> {item_to_print['dueDate']}", unsafe_allow_html=True)
         
         if item_type == 'estimate':
-            # Corrected: Use st.session_state.language for get_translation calls
-            st.write(f"**{get_translation(st.session_state.language, 'status')}:** {get_translation(st.session_state.language, item_to_print['status'])}")
+            st.write(f"<strong>{get_translation(st.session_state.language, 'status')}:</strong> {get_translation(st.session_state.language, item_to_print['status'])}", unsafe_allow_html=True)
 
-        st.markdown("### " + get_translation(st.session_state.language, 'lineItems'))
+        if item_to_print['deliveryDetails']:
+            st.write(f"<strong>{get_translation(st.session_state.language, 'deliveryDetails')}:</strong> {item_to_print['deliveryDetails']}", unsafe_allow_html=True)
+        st.markdown("<hr>", unsafe_allow_html=True)
+
+        st.markdown("<h3>" + get_translation(st.session_state.language, 'lineItems') + "</h3>", unsafe_allow_html=True)
         printable_line_item_data = []
         for i, item in enumerate(item_to_print['lineItems']):
             printable_line_item_data.append({
@@ -932,10 +1233,30 @@ def main():
                 get_translation(st.session_state.language, 'description'): item['description'],
                 get_translation(st.session_state.language, 'quantity'): item['quantity'],
                 get_translation(st.session_state.language, 'unitPrice'): format_currency(item['unitPrice'], st.session_state.currency),
-                get_translation(st.session_state.language, 'amount'): format_currency(float(item['quantity']) * float(item['unitPrice']), st.session_state.currency)
+                get_translation(st.session_state.language, 'amount'): format_currency(item['amountExclVAT'], st.session_state.currency),
+                get_translation(st.session_state.language, 'vatAmount'): format_currency(item['vatAmount'], st.session_state.currency),
+                get_translation(st.session_state.language, 'amountInclVAT'): format_currency(item['amountInclVAT'], st.session_state.currency)
             })
-        st.table(pd.DataFrame(printable_line_item_data))
-        st.markdown(f"**{get_translation(st.session_state.language, 'totalAmount')}:** {format_currency(calculate_total(item_to_print['lineItems']), st.session_state.currency)}")
+        
+        # Manually create HTML table for better print control
+        table_html = "<table><thead><tr>"
+        for col in printable_line_item_data[0].keys():
+            table_html += f"<th>{col}</th>"
+        table_html += "</tr></thead><tbody>"
+        for row in printable_line_item_data:
+            table_html += "<tr>"
+            for val in row.values():
+                table_html += f"<td>{val}</td>"
+            table_html += "</tr>"
+        table_html += "</tbody></table>"
+        st.markdown(table_html, unsafe_allow_html=True)
+
+        st.markdown("<div class='total-section'>", unsafe_allow_html=True)
+        st.markdown(f"<p><strong>{get_translation(st.session_state.language, 'totalAmountExclVAT')}:</strong> {format_currency(item_to_print['totalAmountExclVAT'], st.session_state.currency)}</p>", unsafe_allow_html=True)
+        st.markdown(f"<p><strong>{get_translation(st.session_state.language, 'totalVAT')}:</strong> {format_currency(item_to_print['totalVAT'], st.session_state.currency)}</p>", unsafe_allow_html=True)
+        st.markdown(f"<p><strong>{get_translation(st.session_state.language, 'totalAmount')}:</strong> {format_currency(item_to_print['totalAmount'], st.session_state.currency)}</p>", unsafe_allow_html=True)
+        st.markdown("</div>", unsafe_allow_html=True)
+        
         st.markdown('</div>', unsafe_allow_html=True)
         st.info("Use your browser's print function (Ctrl+P or Cmd+P) to save this as a PDF.")
 
@@ -948,7 +1269,7 @@ def add_invoice_wrapper(invoice_data, lang):
         add_invoice(invoice_data)
         st.session_state.message = get_translation(lang, 'invoiceAddedSuccess')
         st.session_state.message_type = 'success'
-        st.session_state.selected_invoice = None # Clear selection to refresh list
+        st.session_state.selected_invoice = None
     except Exception as e:
         st.session_state.message = f"{get_translation(lang, 'failedToAddInvoice')} {e}"
         st.session_state.message_type = 'error'
@@ -958,7 +1279,7 @@ def update_invoice_wrapper(invoice_id, updated_data, lang):
         update_invoice(invoice_id, updated_data)
         st.session_state.message = get_translation(lang, 'invoiceUpdatedSuccess')
         st.session_state.message_type = 'success'
-        st.session_state.selected_invoice = None # Clear selection to refresh list
+        st.session_state.selected_invoice = None
     except Exception as e:
         st.session_state.message = f"{get_translation(lang, 'failedToUpdateInvoice')} {e}"
         st.session_state.message_type = 'error'
@@ -975,11 +1296,11 @@ def generate_next_invoice(original_invoice, lang, currency):
         next_date = datetime.strptime(next_date_str, '%Y-%m-%d').date()
 
         if original_invoice['recurrenceFrequency'] == 'monthly':
-            next_date = (next_date + timedelta(days=31)).replace(day=min(next_date.day, (next_date + timedelta(days=31)).day)) # Adjust for month end
+            next_date = (next_date + timedelta(days=31)).replace(day=min(next_date.day, (next_date + timedelta(days=31)).day))
         elif original_invoice['recurrenceFrequency'] == 'quarterly':
-            next_date = (next_date + timedelta(days=92)).replace(day=min(next_date.day, (next_date + timedelta(days=92)).day)) # Approx 3 months
+            next_date = (next_date + timedelta(days=92)).replace(day=min(next_date.day, (next_date + timedelta(days=92)).day))
         elif original_invoice['recurrenceFrequency'] == 'annually':
-            next_date = (next_date + timedelta(days=366)).replace(day=min(next_date.day, (next_date + timedelta(days=366)).day)) # Approx 1 year
+            next_date = (next_date + timedelta(days=366)).replace(day=min(next_date.day, (next_date + timedelta(days=366)).day))
         
         if original_invoice['endDate'] and datetime.strptime(original_invoice['endDate'], '%Y-%m-%d').date() < next_date:
             st.session_state.message = "Cannot generate next invoice: End date has passed."
@@ -991,7 +1312,9 @@ def generate_next_invoice(original_invoice, lang, currency):
         new_invoice_data = original_invoice.copy()
         new_invoice_data['invoiceNumber'] = str(new_invoice_number)
         new_invoice_data['invoiceDate'] = next_date.strftime('%Y-%m-%d')
-        new_invoice_data['id'] = None # Ensure new ID for new record
+        new_invoice_data['dueDate'] = (next_date + timedelta(days=14)).strftime('%Y-%m-%d') # Default 14 days for new recurring invoice
+        new_invoice_data['id'] = None
+        new_invoice_data['isCancelled'] = False # New invoice is not cancelled
         
         add_invoice(new_invoice_data)
         
@@ -1001,7 +1324,7 @@ def generate_next_invoice(original_invoice, lang, currency):
 
         st.session_state.message = get_translation(lang, 'invoiceGeneratedSuccess')
         st.session_state.message_type = 'success'
-        st.session_state.selected_invoice = None # Refresh list and details
+        st.session_state.selected_invoice = None
     except Exception as e:
         st.session_state.message = f"{get_translation(lang, 'failedToGenerateInvoice')} {e}"
         st.session_state.message_type = 'error'
@@ -1015,7 +1338,7 @@ def add_estimate_wrapper(estimate_data, lang):
         add_estimate(estimate_data)
         st.session_state.message = get_translation(lang, 'estimateAddedSuccess')
         st.session_state.message_type = 'success'
-        st.session_state.selected_estimate = None # Clear selection to refresh list
+        st.session_state.selected_estimate = None
     except Exception as e:
         st.session_state.message = f"{get_translation(lang, 'failedToAddEstimate')} {e}"
         st.session_state.message_type = 'error'
@@ -1025,7 +1348,7 @@ def update_estimate_wrapper(estimate_id, updated_data, lang):
         update_estimate(estimate_id, updated_data)
         st.session_state.message = get_translation(lang, 'estimateUpdatedSuccess')
         st.session_state.message_type = 'success'
-        st.session_state.selected_estimate = None # Clear selection to refresh list
+        st.session_state.selected_estimate = None
     except Exception as e:
         st.session_state.message = f"{get_translation(lang, 'failedToUpdateEstimate')} {e}"
         st.session_state.message_type = 'error'
@@ -1037,14 +1360,24 @@ def convert_estimate_to_invoice(estimate, lang, currency):
         new_invoice_data = {
             'invoiceNumber': str(next_invoice_number),
             'invoiceDate': datetime.now().strftime('%Y-%m-%d'),
+            'dueDate': (datetime.now() + timedelta(days=14)).strftime('%Y-%m-%d'), # Default 14 days
             'clientName': estimate['clientName'],
             'clientEmail': estimate['clientEmail'],
+            'sellerName': estimate['sellerName'],
+            'sellerAddress': estimate['sellerAddress'],
+            'sellerOrgNumber': estimate['sellerOrgNumber'],
+            'sellerVatRegistered': estimate['sellerVatRegistered'],
+            'deliveryDetails': estimate['deliveryDetails'],
+            'vatRate': estimate['vatRate'],
             'lineItems': estimate['lineItems'],
-            'totalAmount': estimate['totalAmount'],
+            'totalAmount': estimate['totalAmount'], # This is totalInclVAT
+            'totalAmountExclVAT': estimate['totalAmountExclVAT'],
+            'totalVAT': estimate['totalVAT'],
             'isRecurring': False,
             'recurrenceFrequency': None,
             'nextInvoiceDate': None,
             'endDate': None,
+            'isCancelled': False # New invoice from estimate is not cancelled
         }
         add_invoice(new_invoice_data)
 
@@ -1054,8 +1387,8 @@ def convert_estimate_to_invoice(estimate, lang, currency):
 
         st.session_state.message = get_translation(lang, 'estimateConvertedSuccess')
         st.session_state.message_type = 'success'
-        st.session_state.selected_estimate = None # Deselect converted estimate
-        st.session_state.current_view = 'invoices' # Switch to invoices view
+        st.session_state.selected_estimate = None
+        st.session_state.current_view = 'invoices'
     except Exception as e:
         st.session_state.message = f"{get_translation(lang, 'failedToConvertEstimate')} {e}"
         st.session_state.message_type = 'error'
