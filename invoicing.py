@@ -1204,7 +1204,8 @@ def main():
         st.markdown('<div class="printable-area">', unsafe_allow_html=True)
         st.markdown(f"<h1 style='text-align: center;'>{get_translation(st.session_state.language, item_type).upper()} #{item_to_print[f'{item_type}Number']}</h1>", unsafe_allow_html=True)
         
-        if item_type == 'invoice' and item_to_print['isCancelled']:
+        # Safely check for 'isCancelled' key
+        if item_type == 'invoice' and item_to_print.get('isCancelled', False):
             st.markdown("<h2 style='text-align: center; color: red;'>CANCELLED</h2>", unsafe_allow_html=True)
 
         st.markdown("<h3>Seller Information:</h3>", unsafe_allow_html=True)
