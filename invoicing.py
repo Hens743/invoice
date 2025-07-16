@@ -599,17 +599,17 @@ def invoice_detail_view(invoice, on_update, on_delete, on_generate_next_invoice,
             st.session_state.edited_invoice_data = invoice.copy()
             st.session_state.edited_invoice_data['lineItems'] = [item.copy() for item in invoice['lineItems']]
             st.session_state.show_add_invoice_modal = True # Re-use modal for editing
-            st.experimental_rerun()
+            st.rerun() # Changed from experimental_rerun()
     with col2:
         if st.button(get_translation(lang, 'delete'), key=f"delete_invoice_{invoice['id']}"):
             st.session_state.show_delete_confirm = True
             st.session_state.item_to_delete = {'id': invoice['id'], 'type': 'invoice', 'number': invoice['invoiceNumber'], 'clientName': invoice['clientName']}
-            st.experimental_rerun()
+            st.rerun() # Changed from experimental_rerun()
     with col3:
         if st.button(get_translation(lang, 'generatePdf'), key=f"print_invoice_{invoice['id']}"):
             st.session_state.show_print_preview = True
             st.session_state.print_item = {'type': 'invoice', 'data': invoice}
-            st.experimental_rerun()
+            st.rerun() # Changed from experimental_rerun()
 
     st.markdown("---")
 
@@ -659,17 +659,17 @@ def estimate_detail_view(estimate, on_update, on_delete, on_convert, lang, curre
             st.session_state.edited_estimate_data = estimate.copy()
             st.session_state.edited_estimate_data['lineItems'] = [item.copy() for item in estimate['lineItems']]
             st.session_state.show_add_estimate_modal = True # Re-use modal for editing
-            st.experimental_rerun()
+            st.rerun() # Changed from experimental_rerun()
     with col2:
         if st.button(get_translation(lang, 'delete'), key=f"delete_estimate_{estimate['id']}"):
             st.session_state.show_delete_confirm = True
             st.session_state.item_to_delete = {'id': estimate['id'], 'type': 'estimate', 'number': estimate['estimateNumber'], 'clientName': estimate['clientName']}
-            st.experimental_rerun()
+            st.rerun() # Changed from experimental_rerun()
     with col3:
         if st.button(get_translation(lang, 'generatePdf'), key=f"print_estimate_{estimate['id']}"):
             st.session_state.show_print_preview = True
             st.session_state.print_item = {'type': 'estimate', 'data': estimate}
-            st.experimental_rerun()
+            st.rerun() # Changed from experimental_rerun()
 
     st.markdown("---")
 
@@ -746,13 +746,13 @@ def add_edit_invoice_form(on_add_invoice, on_update_invoice, lang, currency):
                 st.markdown("<br>", unsafe_allow_html=True) # Spacer
                 if st.button(get_translation(lang, 'remove'), key=f"remove_{i}_{is_editing}"):
                     st.session_state.form_line_items.pop(i)
-                    st.experimental_rerun() # Rerun to update the list
+                    st.rerun() # Changed from experimental_rerun() # Rerun to update the list
             new_line_items.append(item)
         st.session_state.form_line_items = new_line_items # Update session state after loop
 
         if st.button(get_translation(lang, 'addLineItem'), key=f"add_line_item_{is_editing}"):
             st.session_state.form_line_items.append({'description': '', 'quantity': 1.0, 'unitPrice': 0.0})
-            st.experimental_rerun() # Rerun to show new line item
+            st.rerun() # Changed from experimental_rerun() # Rerun to show new line item
 
         st.markdown(f"**{get_translation(lang, 'totalAmount')}:** {format_currency(calculate_total(st.session_state.form_line_items), currency)}")
         st.markdown("---")
@@ -791,7 +791,7 @@ def add_edit_invoice_form(on_add_invoice, on_update_invoice, lang, currency):
             st.session_state.edited_invoice_data = None
             st.session_state.form_line_items = [{'description': '', 'quantity': 1.0, 'unitPrice': 0.0}] # Reset form line items
             st.session_state.last_edited_invoice_id_for_form = None # Clear this flag
-            st.experimental_rerun()
+            st.rerun() # Changed from experimental_rerun()
 
     if st.button(get_translation(lang, 'cancel'), key=f"cancel_invoice_form_{is_editing}"):
         st.session_state.show_add_invoice_modal = False
@@ -799,7 +799,7 @@ def add_edit_invoice_form(on_add_invoice, on_update_invoice, lang, currency):
         st.session_state.edited_invoice_data = None
         st.session_state.form_line_items = [{'description': '', 'quantity': 1.0, 'unitPrice': 0.0}] # Reset form line items
         st.session_state.last_edited_invoice_id_for_form = None # Clear this flag
-        st.experimental_rerun()
+        st.rerun() # Changed from experimental_rerun()
 
 
 def add_edit_estimate_form(on_add_estimate, on_update_estimate, lang, currency):
@@ -847,13 +847,13 @@ def add_edit_estimate_form(on_add_estimate, on_update_estimate, lang, currency):
                 st.markdown("<br>", unsafe_allow_html=True) # Spacer
                 if st.button(get_translation(lang, 'remove'), key=f"est_remove_{i}_{is_editing}"):
                     st.session_state.form_estimate_line_items.pop(i)
-                    st.experimental_rerun()
+                    st.rerun() # Changed from experimental_rerun()
             new_line_items.append(item)
         st.session_state.form_estimate_line_items = new_line_items
 
         if st.button(get_translation(lang, 'addLineItem'), key=f"est_add_line_item_{is_editing}"):
             st.session_state.form_estimate_line_items.append({'description': '', 'quantity': 1.0, 'unitPrice': 0.0})
-            st.experimental_rerun()
+            st.rerun() # Changed from experimental_rerun()
 
         st.markdown(f"**{get_translation(lang, 'totalAmount')}:** {format_currency(calculate_total(st.session_state.form_estimate_line_items), currency)}")
         st.markdown("---")
@@ -878,7 +878,7 @@ def add_edit_estimate_form(on_add_estimate, on_update_estimate, lang, currency):
             st.session_state.edited_estimate_data = None
             st.session_state.form_estimate_line_items = [{'description': '', 'quantity': 1.0, 'unitPrice': 0.0}]
             st.session_state.last_edited_estimate_id_for_form = None
-            st.experimental_rerun()
+            st.rerun() # Changed from experimental_rerun()
 
     if st.button(get_translation(lang, 'cancel'), key=f"cancel_estimate_form_{is_editing}"):
         st.session_state.show_add_estimate_modal = False
@@ -886,7 +886,7 @@ def add_edit_estimate_form(on_add_estimate, on_update_estimate, lang, currency):
         st.session_state.edited_estimate_data = None
         st.session_state.form_estimate_line_items = [{'description': '', 'quantity': 1.0, 'unitPrice': 0.0}]
         st.session_state.last_edited_estimate_id_for_form = None
-        st.experimental_rerun()
+        st.rerun() # Changed from experimental_rerun()
 
 def main():
     initialize_database()
@@ -932,12 +932,12 @@ def main():
         selected_language = st.selectbox(get_translation(st.session_state.language, 'language'), ['en', 'nb', 'fr', 'es'], format_func=lambda x: {'en': 'English', 'nb': 'Norsk (Bokmål)', 'fr': 'Français', 'es': 'Español'}[x])
         if selected_language != st.session_state.language:
             st.session_state.language = selected_language
-            st.experimental_rerun()
+            st.rerun() # Changed from experimental_rerun()
     with col_currency:
         selected_currency = st.selectbox(get_translation(st.session_state.language, 'currency'), ['USD', 'EUR', 'NOK'])
         if selected_currency != st.session_state.currency:
             st.session_state.currency = selected_currency
-            st.experimental_rerun()
+            st.rerun() # Changed from experimental_rerun()
 
     st.markdown("---")
 
@@ -960,7 +960,9 @@ def main():
             st.session_state.show_add_invoice_modal = False
             st.session_state.editing_invoice_id = None
             st.session_state.edited_invoice_data = None
-            st.experimental_rerun()
+            st.session_state.form_line_items = [{'description': '', 'quantity': 1.0, 'unitPrice': 0.0}] # Reset form line items
+            st.session_state.last_edited_invoice_id_for_form = None
+            st.rerun() # Changed from experimental_rerun()
     with col_estimates:
         if st.button(get_translation(st.session_state.language, 'estimates'), use_container_width=True):
             st.session_state.current_view = 'estimates'
@@ -968,7 +970,9 @@ def main():
             st.session_state.show_add_estimate_modal = False
             st.session_state.editing_estimate_id = None
             st.session_state.edited_estimate_data = None
-            st.experimental_rerun()
+            st.session_state.form_estimate_line_items = [{'description': '', 'quantity': 1.0, 'unitPrice': 0.0}]
+            st.session_state.last_edited_estimate_id_for_form = None
+            st.rerun() # Changed from experimental_rerun()
 
     st.markdown("---")
 
@@ -985,7 +989,7 @@ def main():
                 st.session_state.edited_invoice_data = None
                 st.session_state.form_line_items = [{'description': '', 'quantity': 1.0, 'unitPrice': 0.0}] # Reset form line items
                 st.session_state.last_edited_invoice_id_for_form = None
-                st.experimental_rerun()
+                st.rerun() # Changed from experimental_rerun()
 
             if not invoices:
                 st.info(get_translation(st.session_state.language, 'noInvoicesYet'))
@@ -995,7 +999,7 @@ def main():
                     if st.button(f"{get_translation(st.session_state.language, 'invoiceNumber')}{inv['invoiceNumber']} - {inv['clientName']} ({format_currency(inv['totalAmount'], st.session_state.currency)})", key=f"select_invoice_{inv['id']}", use_container_width=True):
                         st.session_state.selected_invoice = inv
                         st.session_state.show_print_preview = False # Hide print preview when selecting new invoice
-                        st.experimental_rerun()
+                        st.rerun() # Changed from experimental_rerun()
                     if is_selected:
                         st.markdown("---") # Separator for selected item
 
@@ -1003,8 +1007,8 @@ def main():
             if st.session_state.selected_invoice:
                 invoice_detail_view(
                     st.session_state.selected_invoice,
-                    on_update=lambda inv_id, data: (update_invoice(inv_id, data), setattr(st.session_state, 'message', get_translation(st.session_state.language, 'invoiceUpdatedSuccess')), setattr(st.session_state, 'message_type', 'success'), st.experimental_rerun()),
-                    on_delete=lambda item: (setattr(st.session_state, 'show_delete_confirm', True), setattr(st.session_state, 'item_to_delete', item), st.experimental_rerun()),
+                    on_update=lambda inv_id, data: (update_invoice(inv_id, data), setattr(st.session_state, 'message', get_translation(st.session_state.language, 'invoiceUpdatedSuccess')), setattr(st.session_state, 'message_type', 'success'), st.rerun()), # Changed from experimental_rerun()
+                    on_delete=lambda item: (setattr(st.session_state, 'show_delete_confirm', True), setattr(st.session_state, 'item_to_delete', item), st.rerun()), # Changed from experimental_rerun()
                     on_generate_next_invoice=lambda original_inv: generate_next_invoice(original_inv, st.session_state.language, st.session_state.currency)
                 )
             else:
@@ -1022,7 +1026,7 @@ def main():
                 st.session_state.edited_estimate_data = None
                 st.session_state.form_estimate_line_items = [{'description': '', 'quantity': 1.0, 'unitPrice': 0.0}]
                 st.session_state.last_edited_estimate_id_for_form = None
-                st.experimental_rerun()
+                st.rerun() # Changed from experimental_rerun()
 
             if not estimates:
                 st.info(get_translation(st.session_state.language, 'noEstimatesYet'))
@@ -1032,7 +1036,7 @@ def main():
                     if st.button(f"{get_translation(st.session_state.language, 'estimateNumber')}{est['estimateNumber']} - {est['clientName']} ({format_currency(est['totalAmount'], st.session_state.currency)})", key=f"select_estimate_{est['id']}", use_container_width=True):
                         st.session_state.selected_estimate = est
                         st.session_state.show_print_preview = False # Hide print preview when selecting new estimate
-                        st.experimental_rerun()
+                        st.rerun() # Changed from experimental_rerun()
                     if is_selected:
                         st.markdown("---") # Separator for selected item
 
@@ -1040,8 +1044,8 @@ def main():
             if st.session_state.selected_estimate:
                 estimate_detail_view(
                     st.session_state.selected_estimate,
-                    on_update=lambda est_id, data: (update_estimate(est_id, data), setattr(st.session_state, 'message', get_translation(st.session_state.language, 'estimateUpdatedSuccess')), setattr(st.session_state, 'message_type', 'success'), st.experimental_rerun()),
-                    on_delete=lambda item: (setattr(st.session_state, 'show_delete_confirm', True), setattr(st.session_state, 'item_to_delete', item), st.experimental_rerun()),
+                    on_update=lambda est_id, data: (update_estimate(est_id, data), setattr(st.session_state, 'message', get_translation(st.session_state.language, 'estimateUpdatedSuccess')), setattr(st.session_state, 'message_type', 'success'), st.rerun()), # Changed from experimental_rerun()
+                    on_delete=lambda item: (setattr(st.session_state, 'show_delete_confirm', True), setattr(st.session_state, 'item_to_delete', item), st.rerun()), # Changed from experimental_rerun()
                     on_convert=lambda estimate: convert_estimate_to_invoice(estimate, st.session_state.language, st.session_state.currency)
                 )
             else:
@@ -1051,8 +1055,8 @@ def main():
     if st.session_state.show_add_invoice_modal:
         st.sidebar.markdown("## " + (get_translation(st.session_state.language, 'addInvoiceTitle') if st.session_state.editing_invoice_id is None else f"{get_translation(st.session_state.language, 'edit')} {get_translation(st.session_state.language, 'invoice')}"))
         add_edit_invoice_form(
-            on_add_invoice=lambda data: (add_invoice_wrapper(data, st.session_state.language), st.experimental_rerun()),
-            on_update_invoice=lambda inv_id, data: (update_invoice_wrapper(inv_id, data, st.session_state.language), st.experimental_rerun()),
+            on_add_invoice=lambda data: (add_invoice_wrapper(data, st.session_state.language), st.rerun()), # Changed from experimental_rerun()
+            on_update_invoice=lambda inv_id, data: (update_invoice_wrapper(inv_id, data, st.session_state.language), st.rerun()), # Changed from experimental_rerun()
             lang=st.session_state.language,
             currency=st.session_state.currency
         )
@@ -1060,8 +1064,8 @@ def main():
     if st.session_state.show_add_estimate_modal:
         st.sidebar.markdown("## " + (get_translation(st.session_state.language, 'addEstimateTitle') if st.session_state.editing_estimate_id is None else f"{get_translation(st.session_state.language, 'edit')} {get_translation(st.session_state.language, 'estimate')}"))
         add_edit_estimate_form(
-            on_add_estimate=lambda data: (add_estimate_wrapper(data, st.session_state.language), st.experimental_rerun()),
-            on_update_estimate=lambda est_id, data: (update_estimate_wrapper(est_id, data, st.session_state.language), st.experimental_rerun()),
+            on_add_estimate=lambda data: (add_estimate_wrapper(data, st.session_state.language), st.rerun()), # Changed from experimental_rerun()
+            on_update_estimate=lambda est_id, data: (update_estimate_wrapper(est_id, data, st.session_state.language), st.rerun()), # Changed from experimental_rerun()
             lang=st.session_state.language,
             currency=st.session_state.currency
         )
@@ -1084,12 +1088,12 @@ def main():
                     st.session_state.message_type = 'success'
                 st.session_state.show_delete_confirm = False
                 st.session_state.item_to_delete = None
-                st.experimental_rerun()
+                st.rerun() # Changed from experimental_rerun()
         with col_cancel:
             if st.button(get_translation(st.session_state.language, 'cancel'), key="cancel_delete_btn"):
                 st.session_state.show_delete_confirm = False
                 st.session_state.item_to_delete = None
-                st.experimental_rerun()
+                st.rerun() # Changed from experimental_rerun()
 
     if st.session_state.show_print_preview:
         item_to_print = st.session_state.print_item['data']
@@ -1193,7 +1197,7 @@ def generate_next_invoice(original_invoice, lang, currency):
     except Exception as e:
         st.session_state.message = f"{get_translation(lang, 'failedToGenerateInvoice')} {e}"
         st.session_state.message_type = 'error'
-    st.experimental_rerun()
+    st.rerun() # Changed from experimental_rerun()
 
 
 def add_estimate_wrapper(estimate_data, lang):
@@ -1247,7 +1251,7 @@ def convert_estimate_to_invoice(estimate, lang, currency):
     except Exception as e:
         st.session_state.message = f"{get_translation(lang, 'failedToConvertEstimate')} {e}"
         st.session_state.message_type = 'error'
-    st.experimental_rerun()
+    st.rerun() # Changed from experimental_rerun()
 
 
 if __name__ == "__main__":
