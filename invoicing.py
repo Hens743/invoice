@@ -812,8 +812,8 @@ def main():
                     on_update=lambda inv_id, data: (update_invoice(inv_id, data), setattr(st.session_state, 'message', get_translation(st.session_state.language, 'invoiceUpdatedSuccess')), setattr(st.session_state, 'message_type', 'success'), st.rerun()),
                     on_delete=lambda item: (setattr(st.session_state, 'show_delete_confirm', True), setattr(st.session_state, 'item_to_delete', item), st.rerun()),
                     on_generate_next_invoice=lambda original_inv: generate_next_invoice(original_inv, st.session_state.language, st.session_state.currency),
-                    lang=st.session_state.language,  # Added missing argument
-                    currency=st.session_state.currency # Added missing argument
+                    lang=st.session_state.language,
+                    currency=st.session_state.currency
                 )
             else:
                 st.info(get_translation(st.session_state.language, 'selectInvoice'))
@@ -851,8 +851,8 @@ def main():
                     on_update=lambda est_id, data: (update_estimate(est_id, data), setattr(st.session_state, 'message', get_translation(st.session_state.language, 'estimateUpdatedSuccess')), setattr(st.session_state, 'message_type', 'success'), st.rerun()),
                     on_delete=lambda item: (setattr(st.session_state, 'show_delete_confirm', True), setattr(st.session_state, 'item_to_delete', item), st.rerun()),
                     on_convert=lambda estimate: convert_estimate_to_invoice(estimate, st.session_state.language, st.session_state.currency),
-                    lang=st.session_state.language, # Added missing argument
-                    currency=st.session_state.currency # Added missing argument
+                    lang=st.session_state.language,
+                    currency=st.session_state.currency
                 )
             else:
                 st.info(get_translation(st.session_state.language, 'selectEstimate'))
@@ -916,24 +916,26 @@ def main():
         st.markdown(f"<h1 style='text-align: center;'>{get_translation(st.session_state.language, item_type).upper()} #{item_to_print[f'{item_type}Number']}</h1>", unsafe_allow_html=True)
         
         st.write(f"**{get_translation(st.session_state.language, 'date')}:** {item_to_print[f'{item_type}Date']}")
-        st.write(f"**{get_translation(lang, 'clientName')}:** {item_to_print['clientName']}")
-        st.write(f"**{get_translation(lang, 'clientEmail')}:** {item_to_print['clientEmail']}")
+        # Corrected: Use st.session_state.language for get_translation calls
+        st.write(f"**{get_translation(st.session_state.language, 'clientName')}:** {item_to_print['clientName']}")
+        st.write(f"**{get_translation(st.session_state.language, 'clientEmail')}:** {item_to_print['clientEmail']}")
         
         if item_type == 'estimate':
-            st.write(f"**{get_translation(lang, 'status')}:** {get_translation(lang, item_to_print['status'])}")
+            # Corrected: Use st.session_state.language for get_translation calls
+            st.write(f"**{get_translation(st.session_state.language, 'status')}:** {get_translation(st.session_state.language, item_to_print['status'])}")
 
-        st.markdown("### " + get_translation(lang, 'lineItems'))
+        st.markdown("### " + get_translation(st.session_state.language, 'lineItems'))
         printable_line_item_data = []
         for i, item in enumerate(item_to_print['lineItems']):
             printable_line_item_data.append({
                 '#': i + 1,
-                get_translation(lang, 'description'): item['description'],
-                get_translation(lang, 'quantity'): item['quantity'],
-                get_translation(lang, 'unitPrice'): format_currency(item['unitPrice'], st.session_state.currency),
-                get_translation(lang, 'amount'): format_currency(float(item['quantity']) * float(item['unitPrice']), st.session_state.currency)
+                get_translation(st.session_state.language, 'description'): item['description'],
+                get_translation(st.session_state.language, 'quantity'): item['quantity'],
+                get_translation(st.session_state.language, 'unitPrice'): format_currency(item['unitPrice'], st.session_state.currency),
+                get_translation(st.session_state.language, 'amount'): format_currency(float(item['quantity']) * float(item['unitPrice']), st.session_state.currency)
             })
         st.table(pd.DataFrame(printable_line_item_data))
-        st.markdown(f"**{get_translation(lang, 'totalAmount')}:** {format_currency(calculate_total(item_to_print['lineItems']), st.session_state.currency)}")
+        st.markdown(f"**{get_translation(st.session_state.language, 'totalAmount')}:** {format_currency(calculate_total(item_to_print['lineItems']), st.session_state.currency)}")
         st.markdown('</div>', unsafe_allow_html=True)
         st.info("Use your browser's print function (Ctrl+P or Cmd+P) to save this as a PDF.")
 
